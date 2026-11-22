@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>tvcast</title>
+<!-- Visor alternativo para la tele (Chromium en modo kiosco) o para probar
+     en local. En la caja se recomienda el visor mpv: gasta mucha menos RAM. -->
+<style>
+  html, body { margin:0; height:100%; background:#000; overflow:hidden; cursor:none; }
+  #stage > * { position:absolute; inset:0; width:100%; height:100%; object-fit:contain; }
+  #corner { position:absolute; right:2vw; bottom:3.7vh; height:30vh; display:none; z-index:2; }
+</style>
+</head>
+<body>
+<div id="stage"></div>
+<img id="corner" alt="">
+<script>
+let shown = null;
+function show(snap) {
+  const id = snap.state.currentId || '';
+  if (id === shown) return;
+  shown = id;
+  const c = document.getElementById('corner');
+  if (id) { c.src = '/corner.png?' + Date.now(); c.style.display = 'block'; } else { c.style.display = 'none'; }
+  const it = snap.items.find(i => i.id === id);
+  const stage = document.getElementById('stage');
+  let el;
+  if (!it) {
+    el = document.createElement('img'); el.src = '/idle.png?' + Date.now();
+  } else if (it.kind === 'video') {
+    el = document.createElement('video');
+    el.src = '/media/' + it.id; el.autoplay = true; el.muted = false; el.playsInline = true;
+    el.onended = () => fetch('/api/tv/ended/' + it.id, { method: 'POST' });
+  } else {
+    el = document.createElement('img'); el.src = '/media/' + it.id;
+  }
+  stage.replaceChildren(el);
+}
+function connect() {
+  const es = new EventSource('/api/events');
+  es.onmessage = e => show(JSON.parse(e.data));
+  es.onerror = () => { es.close(); setTimeout(connect, 2000); };
+}
+connect();
+</script>
+</body>
+</html>

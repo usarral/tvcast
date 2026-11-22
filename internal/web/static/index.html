@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fotos a la tele</title>
+<style>
+  :root { --bg:#14171c; --card:#1f242c; --fg:#f2f2f2; --muted:#a0a6b0; --accent:#ffb347; --danger:#ff6b6b; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:16px/1.4 system-ui, sans-serif; background:var(--bg); color:var(--fg); }
+  header { padding:16px; }
+  h1 { font-size:20px; margin:0 0 12px; }
+  .pick { display:block; width:100%; padding:22px; border-radius:14px; border:0; font-size:18px; font-weight:600;
+          background:var(--accent); color:#1b1b1b; text-align:center; }
+  .pick input { display:none; }
+  .controls { display:flex; gap:8px; margin-top:12px; }
+  .controls button { flex:1; padding:12px; border-radius:10px; border:0; background:var(--card); color:var(--fg); font-size:16px; }
+  #status { min-height:1.4em; color:var(--muted); margin:10px 0 0; }
+  progress { width:100%; height:8px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(100px,1fr)); gap:8px; padding:0 16px 32px; }
+  .tile { position:relative; aspect-ratio:1; background:var(--card); border-radius:10px; overflow:hidden; border:3px solid transparent; }
+  .tile.on { border-color:var(--accent); }
+  .tile img { width:100%; height:100%; object-fit:cover; display:block; }
+  .tile .vid { display:flex; align-items:center; justify-content:center; height:100%; font-size:34px; color:var(--muted); }
+  .tile .del { position:absolute; top:4px; right:4px; width:30px; height:30px; border-radius:15px; border:0;
+               background:rgba(0,0,0,.6); color:#fff; font-size:16px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Enviar a la tele</h1>
+  <label class="pick">Elegir fotos o vídeos
+    <input id="files" type="file" accept="image/*,video/*" multiple>
+  </label>
+  <progress id="prog" value="0" max="1" hidden></progress>
+  <p id="status"></p>
+  <div class="controls">
+    <button id="prev" aria-label="Anterior">◀</button>
+    <button id="pause">⏸ Pausa</button>
+    <button id="next" aria-label="Siguiente">▶</button>
+  </div>
+</header>
+<div class="grid" id="grid"></div>
+
+<script>
+const MAX_W = 1920, MAX_H = 1080, THUMB = 320;
+const $ = id => document.getElementById(id);
+let snap = { state:{}, items:[] };
+
+// --- Redimensionar en el móvil ------------------------------------------
+// La caja tiene CPU y RAM justas: decodificar una foto de 12-48 Mpx allí es
+// lento. El móvil la reduce a 1080p (y aplica la rotación EXIF), y de paso
+// Safari convierte HEIC a JPEG. Si algo falla, se envía el original.
+async function decode(file) {
+  try { return await createImageBitmap(file, { imageOrientation: 'from-image' }); }
+  catch (_) {
+    const url = URL.createObjectURL(file);
+    try {
+      const img = new Image(); img.src = url; await img.decode(); return img;
+    } finally { URL.revokeObjectURL(url); }
+  }
+}
+function toJpeg(src, maxW, maxH, q) {
+  const w0 = src.width, h0 = src.height;
+  const k = Math.min(1, maxW / w0, maxH / h0);
+  const c = document.createElement('canvas');
+  c.width = Math.round(w0 * k); c.height = Math.round(h0 * k);
+  c.getContext('2d').drawImage(src, 0, 0, c.width, c.height);
+  return new Promise(res => c.toBlob(res, 'image/jpeg', q));
+}
+async function prepare(file) {
+  if (!file.type.startsWith('image/') || file.type === 'image/gif') return { blob: file, thumb: null };
+  try {
+    const bmp = await decode(file);
+    const blob = await toJpeg(bmp, MAX_W, MAX_H, 0.88);
+    const thumb = await toJpeg(bmp, THUMB, THUMB, 0.7);
+    if (bmp.close) bmp.close();
+    return { blob, thumb, name: file.name.replace(/\.\w+$/, '') + '.jpg' };
+  } catch (e) {
+    return { blob: file, thumb: null };
+  }
+}
+
+function send(p, name) {
+  return new Promise((resolve, reject) => {
+    const fd = new FormData();
+    if (p.thumb) fd.append('thumb', p.thumb, 'thumb.jpg'); // antes que el fichero
+    fd.append('file', p.blob, p.name || name);
+    const x = new XMLHttpRequest();
+    x.open('POST', '/api/upload');
+    x.upload.onprogress = e => { if (e.lengthComputable) $('prog').value = e.loaded / e.total; };
+    x.onload = () => x.status < 300 ? resolve() : reject(new Error(x.responseText.trim() || x.status));
+    x.onerror = () => reject(new Error('sin conexión con la caja'));
+    x.send(fd);
+  });
+}
+
+$('files').onchange = async e => {
+  const files = [...e.target.files]; e.target.value = '';
+  $('prog').hidden = false;
+  let ok = 0;
+  for (const [i, f] of files.entries()) {
+    $('status').textContent = `Enviando ${i + 1} de ${files.length}…`;
+    $('prog').value = 0;
+    try { await send(await prepare(f), f.name); ok++; }
+    catch (err) { $('status').textContent = `${f.name}: ${err.message}`; await new Promise(r => setTimeout(r, 2500)); }
+  }
+  $('prog').hidden = true;
+  $('status').textContent = ok ? `Enviadas ${ok} de ${files.length}` : 'No se envió nada';
+};
+
+const post = (url, method = 'POST') => fetch(url, { method }).then(r => { if (!r.ok && r.status === 401) location.reload(); });
+$('next').onclick = () => post('/api/next');
+$('prev').onclick = () => post('/api/prev');
+$('pause').onclick = () => post('/api/pause?v=' + (snap.state.paused ? 0 : 1));
+
+function render() {
+  $('pause').textContent = snap.state.paused ? '▶ Seguir' : '⏸ Pausa';
+  const g = $('grid'); g.replaceChildren();
+  for (const it of [...snap.items].reverse()) {
+    const t = document.createElement('div');
+    t.className = 'tile' + (it.id === snap.state.currentId ? ' on' : '');
+    if (it.hasThumb || it.kind === 'image') {
+      const img = document.createElement('img');
+      img.loading = 'lazy'; img.alt = it.name;
+      img.src = it.hasThumb ? `/thumb/${it.id}` : `/media/${it.id}`;
+      t.append(img);
+    } else {
+      const v = document.createElement('div'); v.className = 'vid'; v.textContent = '🎬'; t.append(v);
+    }
+    t.onclick = () => post(`/api/show/${it.id}`);
+    const d = document.createElement('button');
+    d.className = 'del'; d.textContent = '✕'; d.setAttribute('aria-label', 'Borrar');
+    d.onclick = ev => { ev.stopPropagation(); if (confirm('¿Borrar de la tele?')) post(`/api/items/${it.id}`, 'DELETE'); };
+    t.append(d);
+    g.append(t);
+  }
+}
+
+function connect() {
+  const es = new EventSource('/api/events');
+  es.onmessage = e => { snap = JSON.parse(e.data); render(); };
+  es.onerror = () => { es.close(); setTimeout(connect, 3000); };
+}
+connect();
+</script>
+</body>
+</html>
