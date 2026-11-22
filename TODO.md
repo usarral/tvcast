@@ -15,6 +15,8 @@
   Si el chip interno no es fiable: adaptador Bluetooth USB solo para el mando.
   Después: servicio que escuche el mando y llame a la API de tvcast
   (flechas → anterior/siguiente, OK → pausa, Home → QR). Ver docs/LESSONS.md.
+  Desde el Mac (`tools/mando/sunday_remote.py`) conecta pero sin teclas: falta
+  probar con enlace emparejado en Linux.
   Probar también HDMI-CEC (mando de la tele).
 - [ ] **hostapd como modo por defecto.** Llevar al repo la configuración que
   funciona en la caja (hostapd.conf, servicio de arranque con espera a la

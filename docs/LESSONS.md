@@ -72,7 +72,22 @@ Notas de lo que funcionó y lo que no en el hardware real, para no repetirlo.
   `f000b000-0451-4000-b000-000000000000` (`b001` inicio/fin, `b002` audio);
   LED en `0xFED0` (`fed1` color, `fed2` periodo, `fed3` efecto); batería
   `0x180F`. Nombres aceptados por la app: `Sunday` y `4MOD 45 BLE`.
-- Mantener Mic enciende la luz del mando, igual que con Android.
+- Mantener Mic enciende la luz del mando, igual que con Android (lo hace el
+  propio mando; no se la hemos encendido nosotros).
+- Probado desde el Mac con `tools/mando/sunday_remote.py` (Python + bleak):
+  conecta sin emparejar, lee batería (`2a19`, %) y firmware (`v1.19`,
+  fabricante "4MOD TECHNOLOGY", modelo `4MOD3401`), y deja suscribirse a todo,
+  pero **no llega ninguna tecla** y escribir en la luz (`fed1..3`) no hace
+  nada visible. El servicio `0xFF00` es un HID por GATT camuflado (información
+  HID `11 01 00 01`, modo de protocolo, punto de control, tres informes
+  `2a4d` con descriptor `2908`), pero su "report map" (`2a4b`) devuelve
+  basura (memoria del firmware) y leer los informes da "Invalid Offset".
+  Hipótesis: el mando solo envía teclas por un enlace cifrado (emparejado),
+  y Core Bluetooth en macOS no deja forzar el emparejamiento desde un script
+  ("Pairing is not available in Core Bluetooth"). Con BlueZ sí se empareja
+  (`Paired/Bonded: yes`), así que la prueba buena es en Linux, con `btmon`.
+- Si un mando BLE deja de anunciarse tras cortes raros: quitar las pilas
+  10 s y pulsar un botón mientras se busca.
 - Para leer el backup sin tocarlo: la tabla GPT dice dónde está cada
   partición; se recortan `vendor`/`system` de `gunzip -c` y se leen con
   `debugfs` (e2fsprogs) en el Mac, sin montar.
