@@ -82,7 +82,7 @@ abriendo la URL del QR (`/?k=<token>`) o con el código de 6 cifras de la tele
 | GET | `/api/events` | lo mismo por SSE en cada cambio |
 | POST | `/api/upload` | multipart: `thumb` (opcional, JPEG) y luego `file` |
 | POST | `/api/show/{id}` · `/api/next` · `/api/prev` | qué se ve |
-| POST | `/api/pause?v=1\|0` | pausar o seguir el pase |
+| POST | `/api/pause?v=1\|0\|toggle` | pausar, seguir o alternar (mando: OK, Play/Pausa) |
 | DELETE | `/api/items/{id}` | borrar |
 | POST | `/api/tv/qr?v=1\|0\|toggle` | solo desde la caja: fijar o soltar la pantalla de QR (atajos Ctrl+Alt+Q / Ctrl+Alt+S) |
 

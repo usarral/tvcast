@@ -1,0 +1,29 @@
+# Official Sunday remote (Bluetooth LE) -> tvcast. See docs/INSTALL.md, "Remote".
+# Pair the remote once with bluetoothctl before enabling this.
+# Install:
+#   sudo install -m755 tvcast-remote-linux-arm64 /usr/local/bin/tvcast-remote
+#   sudo cp tvcast-remote.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now tvcast-remote
+# Turn it off (photos keep working):  sudo systemctl disable --now tvcast-remote
+[Unit]
+Description=tvcast remote - Sunday Bluetooth LE remote for tvcast
+After=bluetooth.service tvcast.service
+Wants=bluetooth.service
+
+[Service]
+User=tvcast
+Group=tvcast
+# BlueZ's D-Bus policy lets the "bluetooth" group talk to org.bluez.
+SupplementaryGroups=bluetooth
+# Optional: TVCAST_REMOTE_ADDR=AA:BB:... to pick one remote by address.
+EnvironmentFile=-/etc/tvcast.env
+ExecStart=/usr/local/bin/tvcast-remote -api http://127.0.0.1
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

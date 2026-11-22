@@ -135,14 +135,19 @@ func (p *Player) Show(id string) bool {
 func (p *Player) Next() { p.step(+1) }
 func (p *Player) Prev() { p.step(-1) }
 
-func (p *Player) SetPaused(v bool) {
+func (p *Player) SetPaused(v bool) { p.setPaused(func(bool) bool { return v }) }
+
+// TogglePause flips pause atomically (the remote's OK and Play/Pause).
+func (p *Player) TogglePause() { p.setPaused(func(was bool) bool { return !was }) }
+
+func (p *Player) setPaused(f func(was bool) bool) {
 	p.mu.Lock()
-	p.paused = v
+	p.paused = f(p.paused)
 	p.shownAt = time.Now()
-	s, f := p.stateLocked(), p.onChange
+	s, cb := p.stateLocked(), p.onChange
 	p.mu.Unlock()
-	if f != nil {
-		f(s)
+	if cb != nil {
+		cb(s)
 	}
 }
 

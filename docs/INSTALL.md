@@ -179,6 +179,61 @@ sudo systemctl restart triggerhappy
 Without a keyboard, the same over SSH: `curl -X POST 'http://127.0.0.1/api/tv/qr?v=1'`
 (and `v=0` to go back). It only works from the box itself.
 
+## 6c. Official Sunday remote (optional)
+
+The box's original remote is Bluetooth LE, not infrared, and Linux doesn't see
+it as a keyboard: `tvcast-remote` (a separate service) listens to it through
+BlueZ and calls tvcast's local API.
+
+| Button | What it does |
+|---|---|
+| **Right / Left** | Next / previous photo |
+| **OK** or **Play/Pause** | Pause or resume the slideshow |
+| **Home** | Show the QR full screen and pin it; press again to go back |
+| **Back** | Back to the slideshow (drops the pinned QR and resumes) |
+| Up, Down, Heart, Vol+/−, Mic, Power | Nothing yet (they show up in the log) |
+
+The remote never opens the console or restarts tvcast: that stays on the
+keyboard shortcuts (6b), so a family member can't leave the TV on a login.
+
+**Use a USB Bluetooth adapter, not the internal chip.** The internal one
+(BCM4334, it shares the radio with the wifi) hung the whole box twice. Tested
+with a CSR adapter (USB id `0a12:0001`). Before turning Bluetooth on:
+
+```sh
+# Which adapters exist and how each is attached (usb vs serial/uart)
+ls -l /sys/class/bluetooth/
+# If the internal one shows up (not under usb), keep it off. Check first that
+# hci_uart is a module (lsmod | grep hci_uart); undo by deleting the file.
+echo "blacklist hci_uart" | sudo tee /etc/modprobe.d/tvcast-no-internal-bt.conf
+sudo reboot
+```
+
+After the reboot `bluetoothctl list` must show only the USB adapter. Then pair
+the remote once (no PIN; if it doesn't show up, take the batteries out for
+10 s):
+
+```sh
+sudo systemctl enable --now bluetooth
+bluetoothctl            # then: scan on, wait for "Sunday",
+                        #       pair <address>, trust <address>, scan off, quit
+```
+
+Install the service, first in dry-run mode to see keys arrive without acting:
+
+```sh
+sudo install -m755 /tmp/tvcast-remote-linux-arm64 /usr/local/bin/tvcast-remote
+sudo /usr/local/bin/tvcast-remote -dry-run   # press buttons, Ctrl+C to stop
+sudo cp /tmp/tvcast-remote.service /etc/systemd/system/
+sudo systemctl daemon-reload && sudo systemctl enable --now tvcast-remote
+journalctl -u tvcast-remote -f                # one line per key
+```
+
+It reconnects by itself with the stored pairing (after a reboot, the remote
+going to sleep or out of range). It doesn't need a name or address in any
+config: it uses the paired device called "Sunday". To turn it off without
+touching the photos: `sudo systemctl disable --now tvcast-remote`.
+
 ## 7. In the other house
 
 1. Plug in HDMI and power. Turn the TV on **before** or together with the box.
@@ -204,4 +259,5 @@ To update tvcast: copy the new binary as in step 4 (to 10.42.0.1) and
 | A video stutters | Expected with 1080p HEVC or 4K videos (see DESIGN §5) |
 | Videos without sound | `mpv --audio-device=help` to find the HDMI output and add it in `-mpv-args` (`--audio-device=alsa/...`) |
 | Wrong time on the box | Normal without internet; tvcast doesn't care |
+| The remote does nothing | `journalctl -u tvcast-remote -n 30`: "no paired device" means pair it again (6c); "retrying" lines while you press keys mean it can't connect: batteries, or take them out for 10 s |
 | TV in the wrong language | Set `TVCAST_LANG` in `/etc/tvcast.env` and `sudo systemctl restart tvcast` |

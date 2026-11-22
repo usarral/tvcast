@@ -7,17 +7,20 @@
   (see `deploy/splash/README.md`). Tested on the box.
 - [x] **Console for a few seconds at boot.** It was tvcast killing mpv at
   5 s; now it waits up to 30 s. Tested with a reboot.
-- [ ] **Original remote (Bluetooth LE, not IR).** Paired and connected, but no
-  key arrives yet. Next: repeat the capture with `btmon` to see whether the
-  `0xFF00` service notifications arrive and why the connection drops. Careful:
-  the box hung twice with the BCM4334's Bluetooth active; `bluetooth.service`
-  is disabled at boot until we understand it. If the internal chip isn't
-  reliable: a USB Bluetooth adapter just for the remote.
-  Then: a service that listens to the remote and calls the tvcast API
-  (arrows → previous/next, OK → pause, Home → QR). See docs/LESSONS.md.
-  From the Mac (`tools/mando/sunday_remote.py`) it connects but no keys
-  arrive: still to try with a paired link on Linux.
-  Also try HDMI-CEC (the TV's remote).
+- [ ] **Original remote (Bluetooth LE, not IR).** Keys decoded on desktop
+  Linux with a USB adapter (docs/LESSONS.md) and `tvcast-remote` written:
+  Right/Left photo, OK and Play/Pause pause, Home QR, Back slideshow.
+  Next:
+  - [x] Run `tvcast-remote -dry-run` on the desktop with the paired remote:
+        all keys, reconnects alone in ~2 s.
+  - [x] Against a local tvcast with `/tv` open: works.
+  - [ ] On the box, with an automatic revert planned: keep the internal
+        BCM4334 Bluetooth off (`hci_uart` blacklisted), plug in the USB
+        adapter, pair, install the service (docs/INSTALL.md, 6c).
+  - [ ] Leave it a day: does the remote sleep when idle, how long does the
+        first key take after waking, does the box stay up.
+  - [ ] Maybe later: Up/Down, Heart and Vol (nothing obvious yet), HDMI-CEC
+        with the TV's own remote.
 - [ ] **hostapd as the default.** Bring the config that works on the box into
   the repo (hostapd.conf, boot service that waits for the home wifi and falls
   back) and replace `deploy/network/hotspot.sh` (NetworkManager in AP mode +
