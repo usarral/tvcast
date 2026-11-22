@@ -14,9 +14,9 @@
   - [x] Run `tvcast-remote -dry-run` on the desktop with the paired remote:
         all keys, reconnects alone in ~2 s.
   - [x] Against a local tvcast with `/tv` open: works.
-  - [ ] On the box, with an automatic revert planned: keep the internal
-        BCM4334 Bluetooth off (`hci_uart` blacklisted), plug in the USB
-        adapter, pair, install the service (docs/INSTALL.md, 6c).
+  - [ ] On the box with the internal Bluetooth (no USB adapter): watchdog
+        and guard first, then pair and test in phases (docs/INSTALL.md, 6c).
+        If it hangs: €5 USB adapter.
   - [ ] Leave it a day: does the remote sleep when idle, how long does the
         first key take after waking, does the box stay up.
   - [ ] Maybe later: Up/Down, Heart and Vol (nothing obvious yet), HDMI-CEC

@@ -1,4 +1,4 @@
-# Needs Go >= 1.23. The binary is static: build it on the Mac/PC and copy it to the box.
+# Needs Go >= 1.25 (golang.org/x/image 0.41). The binary is static: build it on the Mac/PC and copy it to the box.
 BIN := bin
 PKG := ./cmd/tvcast
 BOX ?= tvbox
@@ -14,6 +14,7 @@ arm64:
 test:
 	go vet ./...
 	go test ./...
+	sh deploy/bluetooth/guard_test.sh
 
 # Local test with the web viewer: open http://localhost:8080/tv in one tab
 # and http://localhost:8080 in another (or from the phone with the URL in the log).

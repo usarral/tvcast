@@ -197,21 +197,70 @@ la API local de tvcast.
 El mando nunca abre la consola ni reinicia tvcast: eso sigue en los atajos de
 teclado (6b), para que nadie de la familia deje la tele en un login.
 
-**Usa un adaptador Bluetooth USB, no el chip interno.** El interno (BCM4334,
-comparte radio con la wifi) colgó la caja entera dos veces. Probado con un
-adaptador CSR (id USB `0a12:0001`). Antes de encender el Bluetooth:
+**El Bluetooth interno es un riesgo.** Esta caja no lleva adaptador USB, así
+que el mando usa el chip interno (BCM4334: el mismo chip, radio y antena que
+la wifi). Con él encendido la caja se colgó dos veces: una copiando 192 MB por
+wifi y otra con el mando conectado. El peor caso es el uso real: la caja como
+"Tele", un móvil subiendo fotos y el mando conectado. Por eso los pasos de
+abajo primero hacen que un cuelgue se arregle solo y luego prueban por fases
+en casa. Si se cuelga en las pruebas: un adaptador USB (unos 5 €; el CSR
+`0a12:0001` está probado) o sin mando.
+
+### 1. Actualiza antes tvcast
+
+Desde el repo, en el ordenador (antes `make arm64`):
 
 ```sh
-# Qué adaptadores hay y cómo está conectado cada uno (usb o serie/uart)
-ls -l /sys/class/bluetooth/
-# Si aparece el interno (no cuelga de usb), mantenlo apagado. Comprueba antes
-# que hci_uart es un módulo (lsmod | grep hci_uart); se deshace borrando el fichero.
-echo "blacklist hci_uart" | sudo tee /etc/modprobe.d/tvcast-no-internal-bt.conf
-sudo reboot
+scp bin/tvcast-linux-arm64 bin/tvcast-remote-linux-arm64 deploy/systemd/tvcast-remote.service \
+    deploy/bluetooth/tvcast-bt-guard deploy/bluetooth/tvcast-bt-guard.service \
+    deploy/bluetooth/watchdog.conf tvbox:/tmp/
 ```
 
-Tras reiniciar, `bluetoothctl list` debe mostrar solo el adaptador USB. Luego
-empareja el mando una vez (sin PIN; si no aparece, quítale las pilas 10 s):
+El binario actual sale en inglés por defecto: antes de instalarlo en una caja
+que estaba en español, añade `TVCAST_LANG=es` a `/etc/tvcast.env`. Luego copia
+`tvcast-linux-arm64` como en el paso 4 y `sudo systemctl restart tvcast`.
+
+### 2. Red de seguridad (antes de encender el Bluetooth)
+
+```sh
+# Watchdog de hardware: un kernel congelado no entra en pánico, así que
+# kernel.panic=10 solo no basta; con el watchdog la caja se reinicia en ~20 s.
+ls /dev/watchdog*                      # tiene que existir; si no, para aquí
+sudo mkdir -p /etc/systemd/system.conf.d
+sudo cp /tmp/watchdog.conf /etc/systemd/system.conf.d/tvcast-watchdog.conf
+# Guardián: tras 2 arranques seguidos sin apagado limpio, apaga el Bluetooth solo.
+sudo install -m755 /tmp/tvcast-bt-guard /usr/local/sbin/
+sudo cp /tmp/tvcast-bt-guard.service /etc/systemd/system/
+sudo systemctl daemon-reload && sudo systemctl enable tvcast-bt-guard
+sudo touch /etc/tvcast-bt-guard.enable
+sudo reboot
+# Tras reiniciar:
+systemctl show -p RuntimeWatchdogUSec  # 20s, no 0
+ls /var/log/journal                     # registro persistente (para leer un cuelgue después)
+```
+
+Los ficheros están en `deploy/bluetooth/`. Para deshacer: bórralos y reinicia.
+
+### 3. Mira el chip antes de usarlo
+
+```sh
+sudo dmesg | grep -iE 'bluetooth|hci|bcm'
+```
+
+- Una línea tipo `BCM: Patch brcm/BCM4334B0.hcd` (o parecida) quiere decir
+  que cargó el parche de firmware del Bluetooth. Si dice que **no encuentra**
+  el `.hcd`, el chip va con su firmware de ROM antiguo, una causa probable de
+  cuelgues: busca el `.hcd` en el backup de Android (`/vendor/firmware`,
+  `/system/etc/firmware`) y cópialo a `/lib/firmware/brcm/` con el nombre que
+  pide el registro.
+- `grep -i btc /lib/firmware/brcm/brcmfmac4334*.txt`: los ajustes de
+  convivencia wifi/Bluetooth (`btc_mode`...). Si no hay y el nvram de Android
+  del backup los tiene, prueba esos. Un cambio cada vez.
+
+### 4. Empareja el mando
+
+Solo habla con un equipo a la vez: primero quítalo del ordenador con el que
+está emparejado (`bluetoothctl remove <dirección>` allí, o apaga su Bluetooth).
 
 ```sh
 sudo systemctl enable --now bluetooth
@@ -219,8 +268,9 @@ bluetoothctl            # y dentro: scan on, espera a "Sunday",
                         #           pair <dirección>, trust <dirección>, scan off, quit
 ```
 
-Instala el servicio, primero en modo prueba para ver llegar las teclas sin
-hacer nada:
+Sin PIN. Si no aparece, quítale las pilas 10 s.
+
+### 5. Instala tvcast-remote
 
 ```sh
 sudo install -m755 /tmp/tvcast-remote-linux-arm64 /usr/local/bin/tvcast-remote
@@ -231,9 +281,27 @@ journalctl -u tvcast-remote -f                # una línea por tecla
 ```
 
 Se reconecta solo con el emparejamiento guardado (tras reiniciar, si el mando
-se duerme o se aleja). No hace falta poner nombre ni dirección en ninguna
-configuración: usa el dispositivo emparejado que se llama "Sunday". Para
-apagarlo sin tocar las fotos: `sudo systemctl disable --now tvcast-remote`.
+se duerme o se aleja) y no necesita nombre ni dirección en ninguna
+configuración. Tras reconectar, unas diez líneas "mic (not mapped)" son normales.
+
+### 6. Prueba por fases, en casa, con el guardián puesto
+
+1. Una hora en reposo con el mando conectado, pulsando teclas de vez en cuando.
+2. En la wifi de casa: sube 30–50 fotos desde un móvil mientras pulsas
+   teclas. Tres veces.
+3. En modo "Tele", la misma subida desde un móvil conectado a "Tele".
+4. Una noche encendida.
+
+Tras cada fase: `uptime` (sin reinicios por sorpresa) y
+`journalctl -k -b | grep -iE 'brcmf|bluetooth|hci'`.
+
+- **Todo bien**: antes de llevarla a la otra casa, `sudo rm
+  /etc/tvcast-bt-guard.enable` (allí puede que la desenchufen cada noche y
+  cada corte contaría como cuelgue). El watchdog se queda.
+- **Se colgó**: el watchdog la reinicia; tras dos seguidos el guardián apaga
+  el Bluetooth y la caja sigue como antes, sin mando. Qué pasó justo antes:
+  `journalctl -b -1 -k -n 50`. Siguiente paso: adaptador USB.
+- Para apagar el mando a mano: `sudo systemctl disable --now tvcast-remote bluetooth`.
 
 ## 7. En la otra casa
 

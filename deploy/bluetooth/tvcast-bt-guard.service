@@ -1,0 +1,19 @@
+# Turns Bluetooth off if the box keeps dying with it on (see tvcast-bt-guard).
+# Install:
+#   sudo install -m755 tvcast-bt-guard /usr/local/sbin/
+#   sudo cp tvcast-bt-guard.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable tvcast-bt-guard
+#   sudo touch /etc/tvcast-bt-guard.enable     # only during the test period
+[Unit]
+Description=tvcast - turn Bluetooth off after repeated unclean boots
+Before=bluetooth.service tvcast-remote.service
+After=local-fs.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/tvcast-bt-guard start
+ExecStop=/usr/local/sbin/tvcast-bt-guard stop
+
+[Install]
+WantedBy=multi-user.target

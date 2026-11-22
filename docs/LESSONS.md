@@ -192,6 +192,27 @@ Tested on a desktop Linux (BlueZ 5.x, CSR USB adapter `0a12:0001`) with
 - **No console or restart from the remote.** Power stays unmapped: one
   accidental press would leave a family member's TV on a login prompt.
 
+### Internal Bluetooth after all (November 2026)
+
+- The plan was a USB adapter for the remote and the internal Bluetooth off.
+  Decision: no adapter in the box (the only one stays on the desktop), so
+  the remote goes on the internal BCM4334, the chip that hung the box twice.
+- Not scanning (tvcast-remote only calls Connect on the bonded device) may
+  help, since one hang involved scanning, but it doesn't remove the risk:
+  the real use (box as "Tele" + phone uploading + remote connected) is the
+  same shape as the 192 MB copy that hung it.
+- **`kernel.panic=10` doesn't cover a freeze**: a hard hang never panics. The
+  safety net is the SoC's hardware watchdog through systemd
+  (`RuntimeWatchdogSec`), so a hang costs about 1.5 min of TV instead of a
+  trip to unplug it.
+- **The guard can't tell a hang from a power cut** (no clock battery, no
+  reliable reset reason), so it only runs during the test period. In a house
+  that unplugs the box at night it would turn Bluetooth off for nothing.
+- Things worth checking if it hangs again: whether the Bluetooth `.hcd`
+  patch loads (without it the chip runs old ROM firmware) and the coexistence
+  settings (`btc_*`) in the wifi nvram, comparing with the Android backup.
+  Plan B stays a €5 USB adapter.
+
 ## English as the main language (November 2026)
 
 - The repo went from Spanish to English (docs, comments, logs, flags) to make
