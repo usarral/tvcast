@@ -92,3 +92,7 @@ Error messages are plain text in the phone's language (`Accept-Language`).
 
 Example for a remote or script on the box itself:
 `curl -X POST localhost:8080/api/next`.
+
+## License
+
+[MIT](LICENSE).

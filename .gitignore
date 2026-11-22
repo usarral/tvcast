@@ -1,3 +1,17 @@
 bin/
 data/
 *.sock
+# local configs and secrets (never commit these)
+*.env
+.env*
+*.pem
+*.key
+*.psk
+hostapd.conf
+# logs, OS and editor leftovers
+*.log
+.DS_Store
+.idea/
+.vscode/
+__pycache__/
+*.pyc
