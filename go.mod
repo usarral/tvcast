@@ -3,9 +3,12 @@ module github.com/usarral/tvcast
 go 1.25.0
 
 require (
-	github.com/godbus/dbus/v5 v5.1.0
+	github.com/godbus/dbus/v5 v5.2.4
 	github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e
 	golang.org/x/image v0.41.0
 )
 
-require golang.org/x/text v0.37.0 // indirect
+require (
+	golang.org/x/sys v0.27.0 // indirect
+	golang.org/x/text v0.37.0 // indirect
+)
