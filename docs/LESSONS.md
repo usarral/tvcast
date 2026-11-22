@@ -171,7 +171,10 @@ Tested on a desktop Linux (BlueZ 5.x, CSR USB adapter `0a12:0001`) with
   firmwares, the length doesn't. The audio characteristic is never subscribed.
 - **Reconnect = retry forever every 2 s**, logging a repeated error once.
   BlueZ only auto-reconnects LE devices for profiles that ask for it (HID),
-  so for this one someone has to call Connect. Still to check on the box:
+  so for this one someone has to call Connect. Confirmed on the desktop: with
+  the bond stored, pressing a key makes the remote advertise but BlueZ doesn't
+  connect by itself; `bluetoothctl connect` (the same `Device1.Connect`) does,
+  at once, without scanning. Still to check on the box:
   whether the remote goes to sleep when idle and how long the first key
   after waking takes.
 - **No console or restart from the remote.** Power stays unmapped: one
