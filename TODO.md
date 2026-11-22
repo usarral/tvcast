@@ -15,6 +15,8 @@
   reliable: a USB Bluetooth adapter just for the remote.
   Then: a service that listens to the remote and calls the tvcast API
   (arrows → previous/next, OK → pause, Home → QR). See docs/LESSONS.md.
+  From the Mac (`tools/mando/sunday_remote.py`) it connects but no keys
+  arrive: still to try with a paired link on Linux.
   Also try HDMI-CEC (the TV's remote).
 - [ ] **hostapd as the default.** Bring the config that works on the box into
   the repo (hostapd.conf, boot service that waits for the home wifi and falls
@@ -37,3 +39,5 @@
 - [ ] Re-encode video on the phone (WebCodecs) if video is worth it.
 - [ ] Bring the box's console commands (`ayuda`, `casa`, `tele`...) into the
       repo with English aliases, keeping the Spanish names.
+- [ ] Translate `tools/mando/sunday_remote.py` to English (comments, output;
+      keep `--efecto` as an alias if the flag is renamed).

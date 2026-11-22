@@ -71,7 +71,22 @@ Notes on what worked and what didn't on the real hardware, so we don't repeat it
   `f000b000-0451-4000-b000-000000000000` (`b001` start/stop, `b002` audio);
   LED on `0xFED0` (`fed1` color, `fed2` period, `fed3` effect); battery
   `0x180F`. Names accepted by the app: `Sunday` and `4MOD 45 BLE`.
-- Holding Mic lights up the remote, same as with Android.
+- Holding Mic lights up the remote, same as with Android (the remote does it
+  by itself; we didn't turn it on).
+- Tested from the Mac with `tools/mando/sunday_remote.py` (Python + bleak):
+  it connects without pairing, reads the battery (`2a19`, %) and firmware
+  (`v1.19`, manufacturer "4MOD TECHNOLOGY", model `4MOD3401`), and allows
+  subscribing to everything, but **no key arrives** and writing to the light
+  (`fed1..3`) does nothing visible. The `0xFF00` service is a disguised
+  HID-over-GATT (HID information `11 01 00 01`, protocol mode, control point,
+  three `2a4d` reports with a `2908` descriptor), but its report map (`2a4b`)
+  returns garbage (firmware memory) and reading the reports gives "Invalid
+  Offset". Hypothesis: the remote only sends keys over an encrypted (paired)
+  link, and Core Bluetooth on macOS doesn't let a script force pairing
+  ("Pairing is not available in Core Bluetooth"). BlueZ does pair
+  (`Paired/Bonded: yes`), so the real test is on Linux, with `btmon`.
+- If a BLE remote stops advertising after odd drops: take the batteries out
+  for 10 s and press a button while scanning.
 - To read the backup without touching it: the GPT table says where each
   partition is; cut `vendor`/`system` out of `gunzip -c` and read them with
   `debugfs` (e2fsprogs) on the Mac, without mounting.
