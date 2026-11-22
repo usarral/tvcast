@@ -10,6 +10,7 @@ build:
 arm64:
 	GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o $(BIN)/tvcast-linux-arm64 $(PKG)
 	GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o $(BIN)/tvcast-remote-linux-arm64 ./cmd/tvcast-remote
+	GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o $(BIN)/tvcast-splash-linux-arm64 ./cmd/splash
 
 test:
 	go vet ./...

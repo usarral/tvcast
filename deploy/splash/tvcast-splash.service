@@ -1,5 +1,7 @@
-# Boot image: paints splash.raw on the framebuffer as soon as systemd starts
-# (~7 s after power on) and stays until mpv takes the screen.
+# Boot image: paints the tvcast screen on the framebuffer as soon as systemd
+# starts (~7 s after power on) and stays until mpv takes the screen.
+# tvcast-splash reads the framebuffer's resolution and pixel format, so it
+# works on any TV or monitor. Language from TVCAST_LANG in /etc/tvcast.env.
 # Needs: console=serial in /boot/armbianEnv.txt (no console=tty1),
 # extraargs with vt.global_cursor_default=0, and the login on tty2 instead of tty1.
 # See deploy/splash/README.md.
@@ -7,12 +9,13 @@
 Description=tvcast - boot image on the TV
 DefaultDependencies=no
 ConditionPathExists=/dev/fb0
-ConditionPathExists=/usr/share/tvcast/splash.raw
+ConditionPathExists=/usr/local/bin/tvcast-splash
 
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-ExecStart=/bin/sh -c 'cat /usr/share/tvcast/splash.raw > /dev/fb0'
+EnvironmentFile=-/etc/tvcast.env
+ExecStart=/usr/local/bin/tvcast-splash -fb /dev/fb0
 
 [Install]
 WantedBy=sysinit.target

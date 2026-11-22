@@ -49,11 +49,18 @@ Notes on what worked and what didn't on the real hardware, so we don't repeat it
   systemd write only to the serial port), `vt.global_cursor_default=0
   logo.nologo`, and a raw image copied to `/dev/fb0` as soon as systemd
   starts. Details in `deploy/splash/README.md`.
-- The console framebuffer runs at 2560x1440 (the TV's preferred mode), not
-  1920x1080 like mpv: the image must be the size in
-  `/sys/class/graphics/fb0/virtual_size`, in BGRX.
+- The console framebuffer ran at 2560x1440 on the TV (its preferred mode),
+  not 1920x1080 like mpv, and at other sizes on other screens: see below.
 - A login on tty1 would draw over the image: it moves to tty2 and Ctrl+Alt+C
   does `chvt 2`. U-Boot's part (first seconds) can't be hidden without rebuilding it.
+
+- **The boot image must be drawn for the screen it's on.** The first version
+  was a raw BGRX file made beforehand for the TV's 2560x1440 framebuffer and
+  copied with `cat` to `/dev/fb0`. On a 1080p portable monitor it came out
+  garbled: same bytes, different width and line length. Now `tvcast-splash`
+  asks the framebuffer (FBIOGET_VSCREENINFO / FBIOGET_FSCREENINFO) for its
+  visible size, bits per pixel, color offsets and line length and draws the
+  image at boot. tvcast itself was fine because mpv sets its own DRM mode.
 
 ## Original remote
 
