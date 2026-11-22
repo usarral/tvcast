@@ -177,6 +177,11 @@ Tested on a desktop Linux (BlueZ 5.x, CSR USB adapter `0a12:0001`) with
   at once, without scanning. Still to check on the box:
   whether the remote goes to sleep when idle and how long the first key
   after waking takes.
+- First run on the desktop with the real remote: keys arrive and map as
+  expected, and it reconnects by itself about 2 s after the remote is
+  switched off and on. On the first connection `StartNotify` on `f000b001`
+  can fail with ATT error 0x0e (likely the link isn't encrypted yet); it's
+  only logged, it doesn't repeat after reconnecting, and Mic still arrives.
 - **No console or restart from the remote.** Power stays unmapped: one
   accidental press would leave a family member's TV on a login prompt.
 
