@@ -13,7 +13,7 @@
   Next:
   - [x] Run `tvcast-remote -dry-run` on the desktop with the paired remote:
         all keys, reconnects alone in ~2 s.
-  - [ ] Against a local tvcast with `/tv` open.
+  - [x] Against a local tvcast with `/tv` open: works.
   - [ ] On the box, with an automatic revert planned: keep the internal
         BCM4334 Bluetooth off (`hci_uart` blacklisted), plug in the USB
         adapter, pair, install the service (docs/INSTALL.md, 6c).

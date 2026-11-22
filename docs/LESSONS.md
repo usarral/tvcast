@@ -186,6 +186,9 @@ Tested on a desktop Linux (BlueZ 5.x, CSR USB adapter `0a12:0001`) with
   the drop. After reconnecting, ~10 "mic" events arrive before the first real
   key (the remote's start-up noise?). Harmless while Mic is unmapped; **if Mic
   ever gets an action, ignore it for the first seconds after connecting.**
+  End to end with a local tvcast and `/tv`: Left/Right change the photo,
+  Home shows the QR, Back drops it and Play/Pause pauses. Validated on the
+  desktop; the box (USB adapter, internal Bluetooth off) is next.
 - **No console or restart from the remote.** Power stays unmapped: one
   accidental press would leave a family member's TV on a login prompt.
 
