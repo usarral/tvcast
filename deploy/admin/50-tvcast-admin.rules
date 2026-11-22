@@ -1,0 +1,11 @@
+// Lets the tvcast user start the admin panel's actions (tvcast-admin@*.service)
+// and nothing else: no stopping, no other units, no sudo.
+// Install: sudo cp 50-tvcast-admin.rules /etc/polkit-1/rules.d/
+polkit.addRule(function (action, subject) {
+    if (action.id == "org.freedesktop.systemd1.manage-units" &&
+        subject.user == "tvcast" &&
+        action.lookup("verb") == "start" &&
+        /^tvcast-admin@[a-z-]+\.service$/.test(action.lookup("unit") || "")) {
+        return polkit.Result.YES;
+    }
+});

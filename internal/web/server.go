@@ -8,15 +8,19 @@ import (
 	"errors"
 	"fmt"
 	"html/template"
+	"image"
+	"image/png"
 	"io"
 	"log"
 	"mime/multipart"
 	"net"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/usarral/tvcast/internal/admin"
 	"github.com/usarral/tvcast/internal/i18n"
 	"github.com/usarral/tvcast/internal/player"
 	"github.com/usarral/tvcast/internal/store"
@@ -42,6 +46,9 @@ type Server struct {
 	// Lang is the default language of the phone pages and errors; the
 	// phone's own language (Accept-Language) wins when it is supported.
 	Lang i18n.Lang
+	// Admin receives the keys of the keyboard and the remote (/api/tv/key)
+	// and owns the hidden admin panel. nil = /api/tv/key is not served.
+	Admin *admin.Controller
 
 	hub hub
 
@@ -70,6 +77,10 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/login", s.login)
 	// Keyboard shortcuts on the box (triggerhappy -> curl to 127.0.0.1).
 	mux.HandleFunc("POST /api/tv/qr", s.local(s.holdQR))
+	// Every key from the keyboard (triggerhappy) and the remote (tvcast-remote).
+	mux.HandleFunc("POST /api/tv/key", s.local(s.key))
+	mux.HandleFunc("POST /api/tv/remote", s.local(s.remoteStatus))
+	mux.HandleFunc("GET /api/tv/admin.png", s.local(s.adminPNG))
 	mux.HandleFunc("GET /corner.png", s.auth(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
 		http.ServeFile(w, r, s.CornerPNG())
@@ -90,10 +101,15 @@ func (s *Server) Notify() {
 type snapshot struct {
 	State player.State `json:"state"`
 	Items []store.Item `json:"items"`
+	Admin int          `json:"admin,omitempty"` // admin panel revision, 0 = closed
 }
 
 func (s *Server) snapshot() snapshot {
-	return snapshot{State: s.Player.State(), Items: s.Store.List()}
+	sn := snapshot{State: s.Player.State(), Items: s.Store.List()}
+	if s.Admin != nil {
+		sn.Admin = s.Admin.Rev()
+	}
+	return sn
 }
 
 // --- authentication ----------------------------------------------------------
@@ -242,6 +258,51 @@ func (s *Server) holdQR(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(204)
+}
+
+func (s *Server) key(w http.ResponseWriter, r *http.Request) {
+	if s.Admin == nil {
+		http.Error(w, "no admin", 404)
+		return
+	}
+	k, ok := admin.ParseKey(r.URL.Query().Get("k"))
+	if !ok {
+		http.Error(w, "unknown key", 400)
+		return
+	}
+	s.Admin.Key(k)
+	w.WriteHeader(204)
+}
+
+// remoteStatus: tvcast-remote reports connected=0|1 and battery=0..100.
+func (s *Server) remoteStatus(w http.ResponseWriter, r *http.Request) {
+	if s.Admin == nil {
+		w.WriteHeader(204)
+		return
+	}
+	bat, err := strconv.Atoi(r.URL.Query().Get("battery"))
+	if err != nil || bat < 0 || bat > 100 {
+		bat = -1
+	}
+	s.Admin.SetRemote(r.URL.Query().Get("connected") == "1", bat)
+	w.WriteHeader(204)
+}
+
+// adminPNG is the panel for the /tv web viewer (mpv gets it as an overlay).
+func (s *Server) adminPNG(w http.ResponseWriter, r *http.Request) {
+	var img image.Image
+	if s.Admin != nil {
+		if i := s.Admin.Image(); i != nil {
+			img = i
+		}
+	}
+	if img == nil {
+		http.NotFound(w, r)
+		return
+	}
+	w.Header().Set("Content-Type", "image/png")
+	w.Header().Set("Cache-Control", "no-store")
+	png.Encode(w, img)
 }
 
 // --- API -------------------------------------------------------------------

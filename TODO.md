@@ -41,6 +41,9 @@
 - [ ] Video: measure with real videos from the family's phones.
 - [ ] Re-encode video on the phone (WebCodecs) if video is worth it.
 - [ ] Bring the box's console commands (`ayuda`, `casa`, `tele`...) into the
-      repo with English aliases, keeping the Spanish names.
+      repo with English aliases, keeping the Spanish names. The admin panel
+      already calls `casa` and `tele` (deploy/admin/tvcast-admin).
+- [ ] Admin panel on the box: install (docs/INSTALL.md 6b), check the polkit
+      rule, open it with Ctrl+Alt+A and with the remote's sequence.
 - [ ] Translate `tools/mando/sunday_remote.py` to English (comments, output;
       keep `--efecto` as an alias if the flag is renamed).

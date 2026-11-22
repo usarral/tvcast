@@ -1,0 +1,63 @@
+#!/bin/sh
+# tvcast-admin: the admin panel's privileged actions, run as root by
+# tvcast-admin@<verb>.service (tvcast asks systemd for them; a polkit rule
+# lets the tvcast user start those units and nothing else).
+# Output goes to the journal: Admin panel › Logs › Admin actions, or
+#   journalctl -u 'tvcast-admin@*'
+# The verbs must match internal/admin/system.go (Verbs).
+set -u
+DATA=/var/lib/tvcast
+ENV=/etc/tvcast.env
+
+# The box's own console commands (casa, tele...) live outside the repo for
+# now; they carry the automatic network revert, so we call them, not nmcli.
+need() {
+	command -v "$1" >/dev/null 2>&1 || { echo "tvcast-admin: '$1' not found on this box"; exit 1; }
+}
+
+set_lang() {
+	touch "$ENV"
+	if grep -q '^TVCAST_LANG=' "$ENV"; then
+		sed -i "s/^TVCAST_LANG=.*/TVCAST_LANG=$1/" "$ENV"
+	else
+		echo "TVCAST_LANG=$1" >>"$ENV"
+	fi
+	echo "language: $1"
+	systemctl restart tvcast
+}
+
+pair_remote() {
+	names='Sunday|4MOD 45 BLE'
+	for a in $(bluetoothctl devices Paired | grep -E " ($names)\$" | awk '{print $2}'); do
+		echo "forgetting the old pairing"
+		bluetoothctl remove "$a"
+	done
+	echo "scanning for the remote for up to 60 s: press a key on it (or take the batteries out and in)"
+	addr=""
+	for _ in 1 2 3 4 5 6; do
+		bluetoothctl --timeout 10 scan on >/dev/null 2>&1
+		addr=$(bluetoothctl devices | grep -E " ($names)\$" | awk '{print $2; exit}')
+		[ -n "$addr" ] && break
+	done
+	[ -n "$addr" ] || { echo "remote not found"; exit 1; }
+	bluetoothctl pair "$addr" && bluetoothctl trust "$addr" || { echo "pairing failed"; exit 1; }
+	echo "paired; tvcast-remote connects by itself in a few seconds"
+}
+
+case "${1:-}" in
+wifi-home) need casa; exec casa ;;
+wifi-tele) need tele; exec tele ;;
+new-code)
+	echo "new phone code and QR: every phone has to scan again"
+	rm -f "$DATA/pin" "$DATA/token"
+	systemctl restart tvcast
+	;;
+remote-pair) pair_remote ;;
+lang-es) set_lang es ;;
+lang-en) set_lang en ;;
+restart-tvcast) systemctl restart tvcast ;;
+reboot) systemctl reboot ;;
+poweroff) systemctl poweroff ;;
+console) exec /usr/local/sbin/tvcast-consola ;;
+*) echo "tvcast-admin: unknown action '${1:-}'"; exit 2 ;;
+esac

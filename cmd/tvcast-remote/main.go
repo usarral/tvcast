@@ -11,6 +11,7 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"log"
 	"os"
 	"os/signal"
@@ -54,7 +55,15 @@ func main() {
 	}
 	d := &remote.Dispatcher{API: poster, Keymap: remote.DefaultKeymap, Log: lg}
 	link := &remote.BlueZ{Conn: conn, Address: *addr, Names: strings.Split(*names, ","),
-		ConnectTimeout: *connTimeout, Log: lg}
+		ConnectTimeout: *connTimeout, Log: lg,
+		// Shown in tvcast's admin panel. Best effort: tvcast may be restarting.
+		OnState: func(connected bool, battery int) {
+			c := "0"
+			if connected {
+				c = "1"
+			}
+			go poster.Post(context.Background(), fmt.Sprintf("/api/tv/remote?connected=%s&battery=%d", c, battery))
+		}}
 
 	// Keys are handled one at a time, in order, on the D-Bus goroutine:
 	// each is one quick local HTTP call (3 s timeout at most).

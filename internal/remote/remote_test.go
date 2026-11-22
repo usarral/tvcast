@@ -80,24 +80,35 @@ func TestDispatcherStream(t *testing.T) {
 	for _, n := range []Notification{
 		kb(0x4f), kb(0), // right
 		kb(0x50), kb(0), // left
+		kb(0x52), kb(0), // up
 		kb(0x28), kb(0), // ok
 		cons(0x05), cons(0), // home
 		cons(0x0b), cons(0), // back
-		cons(0x02), cons(0), // play/pause
+		cons(0x3c), cons(0), // heart
 		{Voice, []byte{4}}, {Voice, []byte{0}}, // mic: logged only
-		cons(0x04), cons(0), // power: logged only
 		cons(0x42), // unknown
 	} {
 		d.Handle(context.Background(), n)
 	}
-	want := []string{"/api/next", "/api/prev", "/api/pause?v=toggle", "/api/tv/qr?v=toggle",
-		"/api/tv/qr?v=0", "/api/pause?v=0", "/api/pause?v=toggle"}
+	want := []string{"right", "left", "up", "ok", "home", "back", "heart"}
+	for i := range want {
+		want[i] = "/api/tv/key?k=" + want[i]
+	}
 	if strings.Join(api.calls, " ") != strings.Join(want, " ") {
 		t.Fatalf("calls\n got %v\nwant %v", api.calls, want)
 	}
-	for _, s := range []string{"mic (not mapped)", "power (not mapped)", "unknown notification: report 42"} {
+	for _, s := range []string{"mic (not mapped)", "unknown notification: report 42"} {
 		if !strings.Contains(out.String(), s) {
 			t.Errorf("log lacks %q:\n%s", s, out)
+		}
+	}
+}
+
+func TestEveryButtonButMicIsSent(t *testing.T) {
+	for b := Up; b <= Mic; b++ {
+		_, ok := DefaultKeymap[b]
+		if ok == (b == Mic) {
+			t.Errorf("%v: mapped=%v", b, ok)
 		}
 	}
 }
@@ -105,7 +116,8 @@ func TestDispatcherStream(t *testing.T) {
 func TestDispatcherStopsChainOnError(t *testing.T) {
 	api := &fakeAPI{err: errors.New("tvcast down")}
 	lg, out := quiet()
-	(&Dispatcher{API: api, Keymap: DefaultKeymap, Log: lg}).Handle(context.Background(), cons(0x0b))
+	km := map[Button][]string{Back: {"/a", "/b"}}
+	(&Dispatcher{API: api, Keymap: km, Log: lg}).Handle(context.Background(), cons(0x0b))
 	if len(api.calls) != 1 || !strings.Contains(out.String(), "tvcast down") {
 		t.Fatalf("calls %v, log %q", api.calls, out)
 	}

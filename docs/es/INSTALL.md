@@ -160,25 +160,58 @@ sudo nmcli connection modify "TU_WIFI" connection.autoconnect yes
 sudo nmcli connection down tvcast-ap     # se conecta sola a tu wifi
 ```
 
-## 6b. Atajos de teclado (opcional)
+## 6b. Panel de administración y teclado
 
-Con un teclado USB o el receptor 2,4 GHz enchufado a la caja:
+Todo lo que puedas necesitar en la caja está en un panel oculto en la tele:
 
-| Atajo | Qué hace |
+- **Teclado** (USB o receptor 2,4 GHz): **Ctrl+Alt+A**.
+- **Mando** (6c): **Corazón, Arriba, Corazón, Abajo** en menos de 5 segundos.
+
+Te mueves con las flechas, **OK** (Intro) elige, **Atrás** (Esc) vuelve,
+**Home** cierra. Se cierra solo tras 2 minutos sin pulsar nada. Mientras está
+abierto, el pase se queda en pausa.
+
+| Opción | Qué hace |
 |---|---|
-| **Ctrl+Alt+Q** | Pone el QR a pantalla completa y lo deja fijo, aunque haya fotos o lleguen nuevas (se guardan igual) |
-| **Ctrl+Alt+S** | Vuelve al pase de fotos |
-| **Ctrl+Alt+C** | Para tvcast y enseña el login local (ver `deploy/splash`) |
-| **Ctrl+Alt+T** | Arranca o reinicia tvcast |
+| Estado (derecha) | IP y red (wifi de casa o "Tele"), fotos, espacio libre, tiempo encendida, mando y su batería, versión |
+| Mostrar / quitar el QR | Fija el QR a pantalla completa (lo verás al cerrar el panel) |
+| Pausar / seguir el pase | Lo que hará el pase al cerrar el panel |
+| Red | Wifi de casa o "Tele" (usa los comandos `casa` / `tele` de la caja, con su reversión automática), registro de la wifi |
+| Registros | tvcast, wifi, mando y Bluetooth, acciones de administración, kernel |
+| Fotos | Borrar todas las fotos |
+| Código y QR nuevos | Todos los móviles tendrán que escanear otra vez |
+| Emparejar el mando otra vez | Olvida el emparejamiento viejo y empareja el mando que esté cerca |
+| Idioma | Español / English (pantalla de la tele e imagen de arranque) |
+| Sistema | Reiniciar tvcast, reiniciar, apagar, abrir la consola (login en tty2) |
+
+Todo lo que cambia la caja pide confirmación (No / Sí, con No por defecto).
+Con el panel cerrado, las flechas del teclado cambian de foto, Intro pausa y
+Esc vuelve al pase, igual que el mando.
+
+### Instalación
+
+tvcast va sin privilegios. Lo que necesita root pasa por systemd: tvcast
+arranca `tvcast-admin@<acción>.service` y una regla de polkit deja al usuario
+`tvcast` arrancar esas unidades y nada más (sin sudo).
 
 ```sh
-sudo apt install -y triggerhappy        # si no lo instalaste en el paso 1
-sudo cp /tmp/tvcast.conf /etc/triggerhappy/triggers.d/   # copiado desde deploy/triggerhappy/
-sudo systemctl restart triggerhappy
+sudo apt install -y triggerhappy polkitd   # si faltan (necesita internet: hazlo en casa)
+# desde deploy/admin, deploy/systemd y deploy/triggerhappy, copiados a /tmp:
+sudo install -m755 /tmp/tvcast-admin /usr/local/sbin/
+sudo install -m644 /tmp/tvcast-admin@.service /etc/systemd/system/
+sudo install -m644 /tmp/50-tvcast-admin.rules /etc/polkit-1/rules.d/
+sudo install -m644 /tmp/tvcast.service /etc/systemd/system/   # ahora lee el registro (para el panel)
+sudo cp /tmp/tvcast.conf /etc/triggerhappy/triggers.d/
+sudo systemctl daemon-reload && sudo systemctl restart tvcast triggerhappy
+# Comprueba la regla: esto tiene que funcionar como usuario tvcast (y stop no).
+sudo -u tvcast systemctl start tvcast-admin@restart-tvcast.service
 ```
 
-Sin teclado, lo mismo por SSH: `curl -X POST 'http://127.0.0.1/api/tv/qr?v=1'`
-(y `v=0` para volver). Solo funciona desde la propia caja.
+Las opciones de red llaman a los comandos `casa` y `tele` de la caja (aún no
+están en el repo): si no existen, el panel lo dice en el registro.
+
+Los atajos antiguos (Ctrl+Alt+Q/S/C/T) y `curl -X POST
+'http://127.0.0.1/api/tv/qr?v=1'` siguen funcionando.
 
 ## 6c. Mando original Sunday (opcional)
 
@@ -192,10 +225,12 @@ la API local de tvcast.
 | **OK** o **Play/Pausa** | Pausa o reanuda el pase |
 | **Home** | Pone el QR a pantalla completa y lo deja fijo; otra vez para volver |
 | **Atrás** | Vuelve al pase (quita el QR fijo y reanuda) |
-| Arriba, Abajo, Corazón, Vol +/−, Mic, Encendido | Nada de momento (salen en el registro) |
+| **Corazón, Arriba, Corazón, Abajo** | Abre el panel de administración (6b); dentro, flechas, OK, Atrás y Home manejan el menú |
+| Vol +/−, Mic, Encendido | Nada de momento (salen en el registro) |
 
-El mando nunca abre la consola ni reinicia tvcast: eso sigue en los atajos de
-teclado (6b), para que nadie de la familia deje la tele en un login.
+Encendido no hace nada a propósito, y la consola y los reinicios solo están en
+el panel, detrás de la secuencia y de una confirmación, para que nadie de la
+familia deje la tele en un login sin querer.
 
 **El Bluetooth interno es un riesgo.** Esta caja no lleva adaptador USB, así
 que el mando usa el chip interno (BCM4334: el mismo chip, radio y antena que

@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/usarral/tvcast/internal/admin"
 	"github.com/usarral/tvcast/internal/i18n"
 	"github.com/usarral/tvcast/internal/player"
 	"github.com/usarral/tvcast/internal/store"
@@ -76,5 +77,54 @@ func TestErrorsAreTranslated(t *testing.T) {
 	}
 	if code, body := get(h, "GET", "/api/state", ""); code != 401 || !strings.Contains(body, "Scan the QR") {
 		t.Errorf("en: %d %q", code, body)
+	}
+}
+
+type testBox struct{ *player.Player }
+
+func (testBox) DeleteAll() (int, error) { return 0, nil }
+
+func local(h http.Handler, method, path string) int {
+	r := httptest.NewRequest(method, path, nil)
+	r.RemoteAddr = "127.0.0.1:4444"
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, r)
+	return w.Code
+}
+
+func TestKeyEndpoint(t *testing.T) {
+	st, err := store.Open(t.TempDir(), 1<<20, 1<<30, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pl := player.New(st, time.Hour, 0)
+	s := &Server{Store: st, Player: pl, Token: "secrettoken", Lang: i18n.EN}
+	s.Admin = &admin.Controller{Box: testBox{pl}, Lang: i18n.EN, IdleClose: time.Hour}
+	h := s.Handler()
+
+	if c, _ := get(h, "POST", "/api/tv/key?k=ok", ""); c != 403 {
+		t.Fatalf("phone pressed a key: %d", c)
+	}
+	if c := local(h, "POST", "/api/tv/key?k=mic"); c != 400 {
+		t.Fatalf("unknown key: %d", c)
+	}
+	if c := local(h, "POST", "/api/tv/key?k=ok"); c != 204 || !pl.Paused() {
+		t.Fatalf("OK should pause: %d %v", c, pl.Paused())
+	}
+	if c := local(h, "GET", "/api/tv/admin.png"); c != 404 {
+		t.Fatalf("panel image while closed: %d", c)
+	}
+	if c := local(h, "POST", "/api/tv/key?k=admin"); c != 204 || s.snapshot().Admin == 0 {
+		t.Fatalf("admin key: %d, rev %d", c, s.snapshot().Admin)
+	}
+	if c := local(h, "GET", "/api/tv/admin.png"); c != 200 {
+		t.Fatalf("panel image while open: %d", c)
+	}
+	if c := local(h, "POST", "/api/tv/remote?connected=1&battery=77"); c != 204 {
+		t.Fatalf("remote status: %d", c)
+	}
+	local(h, "POST", "/api/tv/key?k=home")
+	if s.snapshot().Admin != 0 {
+		t.Fatal("Home should close the panel")
 	}
 }

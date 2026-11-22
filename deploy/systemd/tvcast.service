@@ -10,7 +10,8 @@ Wants=NetworkManager.service
 [Service]
 User=tvcast
 Group=tvcast
-SupplementaryGroups=video render audio
+# systemd-journal: the admin panel shows logs (read only).
+SupplementaryGroups=video render audio systemd-journal
 StateDirectory=tvcast
 # TVCAST_WIFI_SSID and TVCAST_WIFI_PASS (for the wifi QR on the TV), and
 # TVCAST_LANG=es for a Spanish TV screen (default en). Phones see the web page

@@ -10,24 +10,21 @@ import (
 	"time"
 )
 
-// DefaultKeymap maps buttons to calls on tvcast's local API (POST, from
-// 127.0.0.1, so no token is needed). Several paths run in order.
+// DefaultKeymap sends every button to tvcast's /api/tv/key (POST, from
+// 127.0.0.1, so no token is needed). tvcast decides what each key does: the
+// everyday actions (Right/Left photo, OK and Play/Pause pause, Home QR, Back
+// slideshow), the secret sequence that opens the admin panel, and the panel's
+// navigation while it is open. Keeping that logic in tvcast means the
+// keyboard (triggerhappy) and the remote behave the same.
 //
-// Left out on purpose:
-//   - Power: no console or restart from the remote. Those are maintenance
-//     actions for whoever installs the box (Ctrl+Alt+C / Ctrl+Alt+T on a
-//     keyboard); one accidental press would leave the TV on a login prompt.
-//   - Up, Down, Heart, Vol+/-, Mic: nothing obvious to do yet. They are
-//     logged, so a future mapping can be tried without new captures.
-var DefaultKeymap = map[Button][]string{
-	Right:     {"/api/next"},
-	Left:      {"/api/prev"},
-	OK:        {"/api/pause?v=toggle"},
-	PlayPause: {"/api/pause?v=toggle"},
-	Home:      {"/api/tv/qr?v=toggle"},
-	// Back: "get me out of whatever this is": drop the pinned QR and resume.
-	Back: {"/api/tv/qr?v=0", "/api/pause?v=0"},
-}
+// Mic is left out: the remote sends bursts of Mic after reconnecting.
+var DefaultKeymap = func() map[Button][]string {
+	m := map[Button][]string{}
+	for b := Up; b <= VolDown; b++ {
+		m[b] = []string{"/api/tv/key?k=" + b.String()}
+	}
+	return m
+}()
 
 // API calls tvcast's HTTP API.
 type API struct {
