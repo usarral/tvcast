@@ -30,6 +30,16 @@ Notas de lo que funcionó y lo que no en el hardware real, para no repetirlo.
 - Al arrancar antes que la red, el QR salía con 127.0.0.1 hasta un minuto.
   Ahora se comprueba la IP cada 3 s.
 - Sin internet no hay NTP ni pila de reloj: no depender de la hora.
+- La tele enseñaba la consola unos segundos en cada arranque en frío. No era
+  la red: tvcast esperaba solo 5 s a que mpv creara su socket IPC y, con la
+  CPU a tope al arrancar, mpv tarda más en abrir DRM. tvcast lo mataba (se ve
+  la consola) y lo relanzaba a los 2 s. El journal lo delata con
+  `mpv: sin socket IPC` justo tras el arranque. Ahora espera hasta 30 s
+  mientras el proceso mpv siga vivo.
+- Ctrl+Alt+C para tvcast a propósito (consola). Si "la tele se reinicia" tras
+  tocar el teclado, mirar `journalctl -t thd` antes de buscar otra causa.
+- Sin pila de reloj, `journalctl --list-boots` y las horas del log mienten
+  hasta que llega NTP: usar `-o short-monotonic` para ordenar el arranque.
 
 ## Sobre "nadie lo ha hecho"
 
