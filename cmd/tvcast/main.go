@@ -1,4 +1,4 @@
-// tvcast: envía fotos y vídeos desde el móvil a la tele.
+// tvcast sends photos and videos from a phone to the TV.
 package main
 
 import (
@@ -20,6 +20,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/usarral/tvcast/internal/i18n"
 	"github.com/usarral/tvcast/internal/idle"
 	"github.com/usarral/tvcast/internal/player"
 	"github.com/usarral/tvcast/internal/store"
@@ -28,23 +29,24 @@ import (
 
 func main() {
 	var (
-		addr      = flag.String("addr", ":8080", "dirección HTTP")
-		dataDir   = flag.String("data", "./data", "carpeta de datos (fotos, índice, token)")
-		display   = flag.String("display", "mpv", "pantalla: mpv | web (solo /tv) ")
-		mpvBin    = flag.String("mpv-bin", "mpv", "binario de mpv; vacío = conectarse a un mpv ya lanzado")
-		mpvArgs   = flag.String("mpv-args", "", "argumentos extra para mpv, separados por espacios (p. ej. --vo=drm)")
-		mpvSock   = flag.String("mpv-socket", "/tmp/tvcast-mpv.sock", "socket IPC de mpv")
-		interval  = flag.Duration("interval", 10*time.Second, "tiempo por foto en el pase")
-		maxFileMB = flag.Int64("max-file-mb", 300, "tamaño máximo por fichero (MB)")
-		maxTotGB  = flag.Float64("max-total-gb", 4, "espacio máximo total (GB); se borran los más antiguos")
-		maxItems  = flag.Int("max-items", 500, "número máximo de elementos")
-		publicURL = flag.String("url", "", "URL para el QR (vacío = detectar IP)")
-		iface     = flag.String("iface", "", "interfaz preferida para detectar la IP (p. ej. wlan0)")
-		wifiSSID  = flag.String("wifi-ssid", "", "si la caja hace de punto de acceso: SSID para el QR de wifi (o TVCAST_WIFI_SSID)")
-		wifiPass  = flag.String("wifi-pass", "", "contraseña del punto de acceso (mejor por variable TVCAST_WIFI_PASS)")
-		noAuth    = flag.Bool("no-auth", false, "desactiva el token del QR (solo desarrollo)")
-		corner    = flag.Bool("corner-qr", true, "QR pequeño en una esquina durante el pase")
-		qrEvery   = flag.Int("qr-every", 12, "intercala la pantalla de QR cada N fotos del pase (0 = nunca)")
+		addr      = flag.String("addr", ":8080", "HTTP address")
+		dataDir   = flag.String("data", "./data", "data folder (photos, index, token)")
+		display   = flag.String("display", "mpv", "display: mpv | web (/tv viewer only)")
+		mpvBin    = flag.String("mpv-bin", "mpv", "mpv binary; empty = connect to an mpv already running")
+		mpvArgs   = flag.String("mpv-args", "", "extra mpv arguments, space separated (e.g. --vo=drm)")
+		mpvSock   = flag.String("mpv-socket", "/tmp/tvcast-mpv.sock", "mpv IPC socket")
+		interval  = flag.Duration("interval", 10*time.Second, "time per photo in the slideshow")
+		maxFileMB = flag.Int64("max-file-mb", 300, "maximum size per file (MB)")
+		maxTotGB  = flag.Float64("max-total-gb", 4, "maximum total space (GB); the oldest items are deleted")
+		maxItems  = flag.Int("max-items", 500, "maximum number of items")
+		publicURL = flag.String("url", "", "URL for the QR (empty = detect IP)")
+		iface     = flag.String("iface", "", "preferred interface to detect the IP (e.g. wlan0)")
+		wifiSSID  = flag.String("wifi-ssid", "", "if the box is the access point: SSID for the wifi QR (or TVCAST_WIFI_SSID)")
+		wifiPass  = flag.String("wifi-pass", "", "access point password (better via TVCAST_WIFI_PASS)")
+		noAuth    = flag.Bool("no-auth", false, "disable the QR token (development only)")
+		corner    = flag.Bool("corner-qr", true, "small QR in a corner during the slideshow")
+		qrEvery   = flag.Int("qr-every", 12, "show the QR screen every N slideshow photos (0 = never)")
+		langFlag  = flag.String("lang", "", "language of the TV screen and default for the phone pages: en | es (or TVCAST_LANG; default en)")
 	)
 	flag.Parse()
 	if *wifiSSID == "" {
@@ -52,6 +54,17 @@ func main() {
 	}
 	if *wifiPass == "" {
 		*wifiPass = os.Getenv("TVCAST_WIFI_PASS")
+	}
+	if *langFlag == "" {
+		*langFlag = os.Getenv("TVCAST_LANG")
+	}
+	lang := i18n.Default
+	if *langFlag != "" {
+		l, ok := i18n.Parse(*langFlag)
+		if !ok {
+			log.Fatalf("unknown language %q (supported: %v)", *langFlag, i18n.Supported)
+		}
+		lang = l
 	}
 
 	if err := os.MkdirAll(*dataDir, 0o750); err != nil {
@@ -89,24 +102,24 @@ func main() {
 		if token != "" {
 			qr += "?k=" + token
 		}
-		if err := idle.Render(idlePath, idle.Info{URL: qr, ShowURL: base, WifiSSID: *wifiSSID, WifiPass: *wifiPass, PIN: pin}); err != nil {
-			log.Printf("pantalla de espera: %v", err)
+		if err := idle.Render(idlePath, idle.Info{URL: qr, ShowURL: base, WifiSSID: *wifiSSID, WifiPass: *wifiPass, PIN: pin, Lang: lang}); err != nil {
+			log.Printf("waiting screen: %v", err)
 		}
-		w, h, err := idle.Corner(cornerPNG, cornerRaw, qr, pin)
+		w, h, err := idle.Corner(cornerPNG, cornerRaw, qr, pin, lang)
 		if err != nil {
-			log.Printf("QR de esquina: %v", err)
+			log.Printf("corner QR: %v", err)
 		}
 		cornerMu.Lock()
 		cornerW, cornerH = w, h
 		cornerMu.Unlock()
-		log.Printf("web: %s  (QR: %s, código: %s)", base, qr, pin)
+		log.Printf("web: %s  (QR: %s, code: %s)", base, qr, pin)
 	}
 	curBase := baseURL()
 	renderIdle(curBase)
 
 	pl := player.New(st, *interval, *qrEvery)
 	srv := &web.Server{
-		Store: st, Player: pl, Token: token, PIN: pin, MaxUpload: *maxFileMB << 20,
+		Store: st, Player: pl, Token: token, PIN: pin, MaxUpload: *maxFileMB << 20, Lang: lang,
 		IdlePath:  func() string { return idlePath },
 		CornerPNG: func() string { return cornerPNG },
 	}
@@ -133,17 +146,17 @@ func main() {
 		m.Start(stop)
 		pl.AddDisplay(m)
 	case "web":
-		// Solo el visor /tv (Chromium kiosco o navegador para pruebas).
+		// Only the /tv viewer (Chromium kiosk, or a browser for testing).
 	default:
-		log.Fatalf("display desconocido: %q", *display)
+		log.Fatalf("unknown display: %q", *display)
 	}
 	go pl.Run(stop)
 
-	// Si cambia la IP (arranque sin red todavía, o paso de la wifi de casa a
-	// "Tele") se rehace el QR. Mirar las interfaces cada 3 s es barato.
+	// When the IP changes (booted before the network, or moved from the home
+	// wifi to "Tele") the QR is redrawn. Checking the interfaces every 3 s is cheap.
 	go watchURL(stop, 3*time.Second, curBase, baseURL, func(b string) {
 		renderIdle(b)
-		pl.Redraw() // repinta la pantalla de QR o el QR de la esquina
+		pl.Redraw() // repaint the QR screen or the corner QR
 	})
 
 	hs := &http.Server{
@@ -151,8 +164,8 @@ func main() {
 		Handler:           srv.Handler(),
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       120 * time.Second,
-		// Sin ReadTimeout/WriteTimeout globales: las subidas de vídeo por
-		// wifi lenta y el SSE son largos. El tamaño ya está limitado.
+		// No global ReadTimeout/WriteTimeout: video uploads over slow wifi
+		// and SSE are long. The size is already limited.
 	}
 	go func() {
 		<-stop
@@ -160,7 +173,7 @@ func main() {
 		defer c()
 		hs.Shutdown(sctx)
 	}()
-	log.Printf("escuchando en %s, datos en %s, pantalla %s", *addr, *dataDir, *display)
+	log.Printf("listening on %s, data in %s, display %s, language %s", *addr, *dataDir, *display, lang)
 	if err := hs.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		log.Fatal(err)
 	}
@@ -178,7 +191,7 @@ func loadToken(path string) (string, error) {
 	return tok, os.WriteFile(path, []byte(tok+"\n"), 0o600)
 }
 
-// watchURL llama a changed cada vez que baseURL() devuelve algo distinto.
+// watchURL calls changed every time baseURL() returns something different.
 func watchURL(stop <-chan struct{}, every time.Duration, cur string, baseURL func() string, changed func(string)) {
 	t := time.NewTicker(every)
 	defer t.Stop()
@@ -195,7 +208,7 @@ func watchURL(stop <-chan struct{}, every time.Duration, cur string, baseURL fun
 	}
 }
 
-// loadPIN: código de 6 cifras para teclear en la web si el QR no se lee.
+// loadPIN: 6-digit code to type on the web page if the QR can't be scanned.
 func loadPIN(path string) (string, error) {
 	if b, err := os.ReadFile(path); err == nil {
 		if p := strings.TrimSpace(string(b)); len(p) == 6 {
@@ -210,7 +223,7 @@ func loadPIN(path string) (string, error) {
 	return p, os.WriteFile(path, []byte(p+"\n"), 0o600)
 }
 
-// detectIP devuelve la primera IPv4 privada, prefiriendo la interfaz pedida.
+// detectIP returns the first private IPv4, preferring the given interface.
 func detectIP(prefer string) string {
 	ifs, err := net.Interfaces()
 	if err != nil {

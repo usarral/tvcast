@@ -46,7 +46,7 @@ func setup(t *testing.T, n, qrEvery int) (*Player, *fakeDisplay, []string) {
 	return p, d, ids
 }
 
-// forzar que "ha pasado el intervalo" y procesar un tick
+// pretend the interval has passed and process one tick
 func expire(p *Player) {
 	p.mu.Lock()
 	p.shownAt = time.Time{}
@@ -57,17 +57,17 @@ func expire(p *Player) {
 func TestQRInterleaved(t *testing.T) {
 	p, d, ids := setup(t, 3, 2)
 	p.Show(ids[0])
-	expire(p) // 1ª automática -> ids[1]
+	expire(p) // 1st automatic -> ids[1]
 	if d.get() != ids[1] {
-		t.Fatalf("esperaba %s, hay %q", ids[1], d.get())
+		t.Fatalf("want %s, got %q", ids[1], d.get())
 	}
-	expire(p) // 2ª automática -> toca QR
+	expire(p) // 2nd automatic -> QR is due
 	if d.get() != "" || !p.State().QRSlide {
-		t.Fatalf("esperaba QR intercalado, hay %q", d.get())
+		t.Fatalf("want inserted QR, got %q", d.get())
 	}
-	expire(p) // acaba el QR -> sigue donde iba
+	expire(p) // QR done -> continue where it was
 	if d.get() != ids[2] {
-		t.Fatalf("tras el QR esperaba %s, hay %q", ids[2], d.get())
+		t.Fatalf("after the QR want %s, got %q", ids[2], d.get())
 	}
 }
 
@@ -76,17 +76,17 @@ func TestHoldQRIgnoresPhotos(t *testing.T) {
 	p.Show(ids[0])
 	p.HoldQR(true)
 	if d.get() != "" || !p.Held() {
-		t.Fatal("HoldQR no puso la pantalla de QR")
+		t.Fatal("HoldQR did not show the QR screen")
 	}
-	p.Show(ids[2]) // llega una foto: se guarda para luego pero no se ve
+	p.Show(ids[2]) // a photo arrives: kept for later but not shown
 	p.Next()
 	expire(p)
 	if d.get() != "" {
-		t.Fatalf("con QR fijo se vio %q", d.get())
+		t.Fatalf("with the QR pinned, %q was shown", d.get())
 	}
 	p.HoldQR(false)
 	if d.get() == "" || p.Held() {
-		t.Fatal("al soltar no volvió al pase")
+		t.Fatal("releasing did not return to the slideshow")
 	}
 }
 
@@ -95,6 +95,6 @@ func TestEmptyShowsQR(t *testing.T) {
 	p.Refresh()
 	expire(p)
 	if d.get() != "" {
-		t.Fatalf("sin fotos debería verse el QR, hay %q", d.get())
+		t.Fatalf("with no photos the QR should show, got %q", d.get())
 	}
 }

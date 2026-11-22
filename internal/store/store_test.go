@@ -44,7 +44,7 @@ func TestSaveLimitsAndQuota(t *testing.T) {
 	}
 
 	if _, err := s.Save("x.jpg", img(2000), nil); !errors.Is(err, ErrTooLarge) {
-		t.Fatalf("esperaba ErrTooLarge, got %v", err)
+		t.Fatalf("want ErrTooLarge, got %v", err)
 	}
 	var ids []string
 	for i := 0; i < 3; i++ {
@@ -53,41 +53,41 @@ func TestSaveLimitsAndQuota(t *testing.T) {
 			t.Fatal(err)
 		}
 		if it.Name != "passwd" {
-			t.Errorf("nombre no saneado: %q", it.Name)
+			t.Errorf("name not sanitized: %q", it.Name)
 		}
 		ids = append(ids, it.ID)
 	}
-	// 3 x ~911 bytes > 2500: el más antiguo debe haberse borrado.
+	// 3 x ~911 bytes > 2500: the oldest must have been deleted.
 	if _, ok := s.Get(ids[0]); ok {
-		t.Error("la cuota no borró el más antiguo")
+		t.Error("the quota did not delete the oldest")
 	}
 	if len(s.List()) != 2 {
-		t.Errorf("esperaba 2 elementos, hay %d", len(s.List()))
+		t.Errorf("want 2 items, got %d", len(s.List()))
 	}
 	entries, _ := os.ReadDir(s.mediaDir())
 	if len(entries) != 2 {
-		t.Errorf("quedan %d ficheros en disco (temporales sin limpiar?)", len(entries))
+		t.Errorf("%d files left on disk (temp files not cleaned?)", len(entries))
 	}
-	// Reabrir conserva el índice.
+	// Reopening keeps the index.
 	s2, err := Open(dir, 1000, 2500, 0)
 	if err != nil || len(s2.List()) != 2 {
-		t.Fatalf("reabrir: %v, %d", err, len(s2.List()))
+		t.Fatalf("reopen: %v, %d", err, len(s2.List()))
 	}
 	if err := s2.Delete(ids[2]); err != nil {
 		t.Fatal(err)
 	}
 	if err := s2.Delete(ids[2]); !errors.Is(err, ErrNotFound) {
-		t.Errorf("borrar dos veces: %v", err)
+		t.Errorf("delete twice: %v", err)
 	}
 }
 
 func TestValidID(t *testing.T) {
 	for _, id := range []string{"", "../etc/passwd", "0123456789abcdeg", "0123456789abcdef0"} {
 		if ValidID(id) {
-			t.Errorf("%q no debería ser válido", id)
+			t.Errorf("%q should not be valid", id)
 		}
 	}
 	if !ValidID("0123456789abcdef") {
-		t.Error("id válido rechazado")
+		t.Error("valid id rejected")
 	}
 }
