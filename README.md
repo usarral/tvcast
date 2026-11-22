@@ -24,7 +24,7 @@ Install: [docs/INSTALL.md](docs/INSTALL.md) ([en español](docs/es/INSTALL.md)).
 
 ## Try it locally (Mac or Linux)
 
-Needs Go 1.23+.
+Needs Go 1.25+.
 
 ```sh
 make test

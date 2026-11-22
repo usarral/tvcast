@@ -196,22 +196,69 @@ BlueZ and calls tvcast's local API.
 The remote never opens the console or restarts tvcast: that stays on the
 keyboard shortcuts (6b), so a family member can't leave the TV on a login.
 
-**Use a USB Bluetooth adapter, not the internal chip.** The internal one
-(BCM4334, it shares the radio with the wifi) hung the whole box twice. Tested
-with a CSR adapter (USB id `0a12:0001`). Before turning Bluetooth on:
+**The internal Bluetooth is a risk.** There is no USB adapter in this box, so
+the remote uses the internal chip (BCM4334: same chip, radio and antenna as
+the wifi). With it on, the box hung twice: once copying 192 MB over wifi and
+once with the remote connected. The worst case is the real use: the box as
+"Tele", a phone uploading photos and the remote connected. So the steps below
+first make a hang recover by itself, then test in phases at home. If it hangs
+in the tests: a USB adapter (about €5; the CSR `0a12:0001` is tested) or no
+remote.
+
+### 1. Update tvcast first
+
+From the repo, on the computer (`make arm64` first):
 
 ```sh
-# Which adapters exist and how each is attached (usb vs serial/uart)
-ls -l /sys/class/bluetooth/
-# If the internal one shows up (not under usb), keep it off. Check first that
-# hci_uart is a module (lsmod | grep hci_uart); undo by deleting the file.
-echo "blacklist hci_uart" | sudo tee /etc/modprobe.d/tvcast-no-internal-bt.conf
-sudo reboot
+scp bin/tvcast-linux-arm64 bin/tvcast-remote-linux-arm64 deploy/systemd/tvcast-remote.service \
+    deploy/bluetooth/tvcast-bt-guard deploy/bluetooth/tvcast-bt-guard.service \
+    deploy/bluetooth/watchdog.conf tvbox:/tmp/
 ```
 
-After the reboot `bluetoothctl list` must show only the USB adapter. Then pair
-the remote once (no PIN; if it doesn't show up, take the batteries out for
-10 s):
+The current binary defaults to English: before installing it on a box that
+was in Spanish, add `TVCAST_LANG=es` to `/etc/tvcast.env`. Then copy
+`tvcast-linux-arm64` as in step 4 and `sudo systemctl restart tvcast`.
+
+### 2. Safety net (before turning Bluetooth on)
+
+```sh
+# Hardware watchdog: a frozen kernel never panics, so kernel.panic=10 alone
+# doesn't help; with the watchdog the box resets itself in ~20 s.
+ls /dev/watchdog*                      # must exist; if not, stop here
+sudo mkdir -p /etc/systemd/system.conf.d
+sudo cp /tmp/watchdog.conf /etc/systemd/system.conf.d/tvcast-watchdog.conf
+# Guard: after 2 unclean boots in a row it turns Bluetooth off by itself.
+sudo install -m755 /tmp/tvcast-bt-guard /usr/local/sbin/
+sudo cp /tmp/tvcast-bt-guard.service /etc/systemd/system/
+sudo systemctl daemon-reload && sudo systemctl enable tvcast-bt-guard
+sudo touch /etc/tvcast-bt-guard.enable
+sudo reboot
+# After the reboot:
+systemctl show -p RuntimeWatchdogUSec  # 20s, not 0
+ls /var/log/journal                     # persistent journal (to read a hang afterwards)
+```
+
+The files are in `deploy/bluetooth/`. Undo: delete them and reboot.
+
+### 3. Look at the chip before using it
+
+```sh
+sudo dmesg | grep -iE 'bluetooth|hci|bcm'
+```
+
+- A line like `BCM: Patch brcm/BCM4334B0.hcd` (or similar) means the
+  Bluetooth firmware patch loaded. If it says the `.hcd` was **not found**,
+  the chip runs its old ROM firmware, a likely cause of hangs: look for the
+  `.hcd` in the Android backup (`/vendor/firmware`, `/system/etc/firmware`)
+  and copy it to `/lib/firmware/brcm/` with the name the log asks for.
+- `grep -i btc /lib/firmware/brcm/brcmfmac4334*.txt`: the wifi/Bluetooth
+  coexistence settings (`btc_mode`...). If there are none and the Android
+  nvram in the backup has them, try those. One change at a time.
+
+### 4. Pair the remote
+
+It talks to one host at a time: first remove it on the computer it is paired
+with (`bluetoothctl remove <address>` there, or turn its Bluetooth off).
 
 ```sh
 sudo systemctl enable --now bluetooth
@@ -219,7 +266,9 @@ bluetoothctl            # then: scan on, wait for "Sunday",
                         #       pair <address>, trust <address>, scan off, quit
 ```
 
-Install the service, first in dry-run mode to see keys arrive without acting:
+No PIN. If it doesn't show up, take the batteries out for 10 s.
+
+### 5. Install tvcast-remote
 
 ```sh
 sudo install -m755 /tmp/tvcast-remote-linux-arm64 /usr/local/bin/tvcast-remote
@@ -230,9 +279,27 @@ journalctl -u tvcast-remote -f                # one line per key
 ```
 
 It reconnects by itself with the stored pairing (after a reboot, the remote
-going to sleep or out of range). It doesn't need a name or address in any
-config: it uses the paired device called "Sunday". To turn it off without
-touching the photos: `sudo systemctl disable --now tvcast-remote`.
+going to sleep or out of range) and needs no name or address in any config.
+After reconnecting, about ten "mic (not mapped)" lines are normal.
+
+### 6. Test in phases, at home, with the guard on
+
+1. One hour idle with the remote connected, pressing keys now and then.
+2. On the home wifi: upload 30–50 photos from a phone while pressing keys.
+   Three times.
+3. In "Tele" mode, the same upload from a phone joined to "Tele".
+4. A night switched on.
+
+After each phase: `uptime` (no surprise reboot) and
+`journalctl -k -b | grep -iE 'brcmf|bluetooth|hci'`.
+
+- **All good**: before taking it to the other house, `sudo rm
+  /etc/tvcast-bt-guard.enable` (there it may be unplugged every night, and
+  each power cut would count as a hang). The watchdog stays.
+- **It hung**: the watchdog reboots it; after two in a row the guard turns
+  Bluetooth off and the box works as before without the remote. What
+  happened just before: `journalctl -b -1 -k -n 50`. Then: USB adapter.
+- To turn the remote off by hand: `sudo systemctl disable --now tvcast-remote bluetooth`.
 
 ## 7. In the other house
 

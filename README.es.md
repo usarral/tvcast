@@ -26,7 +26,7 @@ hardware real ([docs/LESSONS.md](docs/LESSONS.md)), pendiente
 
 ## Probar en local (Mac o Linux)
 
-Requiere Go 1.23+.
+Requiere Go 1.25+.
 
 ```sh
 make test
