@@ -84,7 +84,7 @@ Error messages are plain text in the phone's language (`Accept-Language`).
 | GET | `/api/events` | the same over SSE on every change |
 | POST | `/api/upload` | multipart: `thumb` (optional, JPEG) then `file` |
 | POST | `/api/show/{id}` · `/api/next` · `/api/prev` | what is on screen |
-| POST | `/api/pause?v=1\|0` | pause or resume the slideshow |
+| POST | `/api/pause?v=1\|0\|toggle` | pause, resume or flip (remote: OK, Play/Pause) |
 | DELETE | `/api/items/{id}` | delete |
 | POST | `/api/tv/qr?v=1\|0\|toggle` | box only: pin or release the QR screen (shortcuts Ctrl+Alt+Q / Ctrl+Alt+S) |
 

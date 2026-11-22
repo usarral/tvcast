@@ -55,7 +55,7 @@ Notes on what worked and what didn't on the real hardware, so we don't repeat it
 - A login on tty1 would draw over the image: it moves to tty2 and Ctrl+Alt+C
   does `chvt 2`. U-Boot's part (first seconds) can't be hidden without rebuilding it.
 
-## Original remote (in progress)
+## Original remote
 
 - **It isn't infrared.** The board has an IR receiver (`gpio_ir_recv`, rc0,
   `/dev/lirc0`) with an empty table; with every protocol enabled and
@@ -98,6 +98,84 @@ Notes on what worked and what didn't on the real hardware, so we don't repeat it
   try stayed connected 2.5 min without hanging, but no button notification
   arrived either: still to be checked with `btmon`. If the internal chip
   isn't reliable, plan B: a USB Bluetooth adapter.
+
+### On Linux with a USB adapter (November 2026)
+
+Tested on a desktop Linux (BlueZ 5.x, CSR USB adapter `0a12:0001`) with
+`bluetoothctl`, `btmon` and `bleak`. This answered the open question above:
+**keys only arrive over a paired, encrypted link**, which macOS can't force.
+
+- `bluetoothctl`: `scan on`, `pair`, `trust`, `connect`. It bonds **without
+  PIN or confirmation** (btmon: LTK exchanged, `Encryption: Enabled with
+  AES-CCM`). With the bond stored, `disconnect` + `connect` works again
+  without pairing.
+- The remote talks to one host at a time. Connection parameters it asks for:
+  interval 12.5 ms, latency 44, supervision timeout 20 s.
+- BlueZ keeps it connected but doesn't treat it as a keyboard (the `0xFF00`
+  service imitates HID under another UUID): nothing in `/dev/input`. You have
+  to subscribe over GATT from user space.
+- `bleak` can't use a remote that is already connected, because it wants to
+  see it advertise while scanning. BlueZ's own D-Bus API doesn't care:
+  `Device1.Connect` on the bonded device works either way. That's one reason
+  `tvcast-remote` talks to BlueZ directly instead of using bleak.
+- Every press sends the button's bytes and every release sends zeros:
+
+| Button | Characteristic | Bytes |
+|---|---|---|
+| Up | `2a4d` keyboard (8-byte report) | `00 00 52 00 00 00 00 00` |
+| Down | `2a4d` keyboard | `00 00 51 00 00 00 00 00` |
+| Left | `2a4d` keyboard | `00 00 50 00 00 00 00 00` |
+| Right | `2a4d` keyboard | `00 00 4f 00 00 00 00 00` |
+| OK | `2a4d` keyboard | `00 00 28 00 00 00 00 00` |
+| Back | `2a4d` consumer (1 byte) | `0b` |
+| Home | `2a4d` consumer | `05` |
+| Play/Pause | `2a4d` consumer | `02` |
+| Heart | `2a4d` consumer | `3c` |
+| Power | `2a4d` consumer | `04` |
+| Vol + | `2a4d` consumer | `09` |
+| Vol − | `2a4d` consumer | `0a` |
+| Mic | `f000b001` + `f000b002` | `04` on b001, ~170 notifications of 20 bytes (audio) on b002, `00` on b001 on release |
+
+- Keyboard codes are standard HID usages (0x4f–0x52 arrows, 0x28 Enter).
+  Consumer codes are one byte with the remote's own numbers, not a bitmask.
+  Holding Mic gives the same as a short press. No auto-repeat while held.
+- Characteristics that notify: `2a4d` ×2 (keyboard and consumer), `2a22`,
+  `fed3`, the four `005f000x-2ff2-4ed5-b045-4c7463617865` of `0xFEF6`, `2a19`
+  (battery), `f000b001` and `f000b002`. Only `2a4d` and `f000b00x` sent
+  anything when pressing buttons.
+- The LED: writing `fed1` (3 bytes), `fed2` and `fed3` with response is
+  accepted and ignored (reads back 0, nothing lights). The firmware drives the
+  light with Mic. Seen once: the light stopped working after several
+  disconnects and came back after reconnecting.
+
+### How tvcast uses it (`tvcast-remote`)
+
+- **Go, not Python.** The repo is Go and the box gets static binaries copied
+  over; Python + bleak would mean pip/venv on a box with no internet, and
+  bleak's need to see the remote advertise is a problem for reconnecting.
+  `godbus` (pure Go, no cgo) is the only new dependency, and the BlueZ D-Bus
+  calls needed are few: GetManagedObjects, Device1.Connect, StartNotify, and
+  PropertiesChanged signals.
+- **Calls tvcast's HTTP API on 127.0.0.1, no uinput.** The API already
+  trusts loopback and has next/prev/pause/QR. uinput would need root or a
+  udev rule, plus key bindings somewhere to turn keys into actions again.
+  Added `v=toggle` to `/api/pause` so OK can flip pause without a read first.
+- **Its own service, not inside tvcast.** Bluetooth is the risky part on this
+  box; `systemctl disable --now tvcast-remote` leaves the photos untouched,
+  and restarting tvcast doesn't drop the link.
+- **No address in config.** It picks the paired device named "Sunday" (or
+  "4MOD 45 BLE"), on any adapter. Only paired devices count, so another
+  remote advertising nearby isn't used. `-addr` exists for two remotes.
+- **Reports told apart by length** (8 bytes keyboard, 1 byte consumer), not
+  by handle or report-reference descriptor: handles can change between
+  firmwares, the length doesn't. The audio characteristic is never subscribed.
+- **Reconnect = retry forever every 2 s**, logging a repeated error once.
+  BlueZ only auto-reconnects LE devices for profiles that ask for it (HID),
+  so for this one someone has to call Connect. Still to check on the box:
+  whether the remote goes to sleep when idle and how long the first key
+  after waking takes.
+- **No console or restart from the remote.** Power stays unmapped: one
+  accidental press would leave a family member's TV on a login prompt.
 
 ## English as the main language (November 2026)
 

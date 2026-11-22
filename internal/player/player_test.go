@@ -98,3 +98,15 @@ func TestEmptyShowsQR(t *testing.T) {
 		t.Fatalf("with no photos the QR should show, got %q", d.get())
 	}
 }
+
+func TestTogglePause(t *testing.T) {
+	p, _, _ := setup(t, 1, 0)
+	p.TogglePause()
+	if !p.State().Paused {
+		t.Fatal("toggle from playing should pause")
+	}
+	p.TogglePause()
+	if p.State().Paused {
+		t.Fatal("toggle from paused should resume")
+	}
+}

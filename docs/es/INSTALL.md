@@ -180,6 +180,61 @@ sudo systemctl restart triggerhappy
 Sin teclado, lo mismo por SSH: `curl -X POST 'http://127.0.0.1/api/tv/qr?v=1'`
 (y `v=0` para volver). Solo funciona desde la propia caja.
 
+## 6c. Mando original Sunday (opcional)
+
+El mando de la caja es Bluetooth LE, no infrarrojo, y Linux no lo ve como
+teclado: `tvcast-remote` (un servicio aparte) lo escucha por BlueZ y llama a
+la API local de tvcast.
+
+| Botón | Qué hace |
+|---|---|
+| **Derecha / Izquierda** | Foto siguiente / anterior |
+| **OK** o **Play/Pausa** | Pausa o reanuda el pase |
+| **Home** | Pone el QR a pantalla completa y lo deja fijo; otra vez para volver |
+| **Atrás** | Vuelve al pase (quita el QR fijo y reanuda) |
+| Arriba, Abajo, Corazón, Vol +/−, Mic, Encendido | Nada de momento (salen en el registro) |
+
+El mando nunca abre la consola ni reinicia tvcast: eso sigue en los atajos de
+teclado (6b), para que nadie de la familia deje la tele en un login.
+
+**Usa un adaptador Bluetooth USB, no el chip interno.** El interno (BCM4334,
+comparte radio con la wifi) colgó la caja entera dos veces. Probado con un
+adaptador CSR (id USB `0a12:0001`). Antes de encender el Bluetooth:
+
+```sh
+# Qué adaptadores hay y cómo está conectado cada uno (usb o serie/uart)
+ls -l /sys/class/bluetooth/
+# Si aparece el interno (no cuelga de usb), mantenlo apagado. Comprueba antes
+# que hci_uart es un módulo (lsmod | grep hci_uart); se deshace borrando el fichero.
+echo "blacklist hci_uart" | sudo tee /etc/modprobe.d/tvcast-no-internal-bt.conf
+sudo reboot
+```
+
+Tras reiniciar, `bluetoothctl list` debe mostrar solo el adaptador USB. Luego
+empareja el mando una vez (sin PIN; si no aparece, quítale las pilas 10 s):
+
+```sh
+sudo systemctl enable --now bluetooth
+bluetoothctl            # y dentro: scan on, espera a "Sunday",
+                        #           pair <dirección>, trust <dirección>, scan off, quit
+```
+
+Instala el servicio, primero en modo prueba para ver llegar las teclas sin
+hacer nada:
+
+```sh
+sudo install -m755 /tmp/tvcast-remote-linux-arm64 /usr/local/bin/tvcast-remote
+sudo /usr/local/bin/tvcast-remote -dry-run   # pulsa botones, Ctrl+C para salir
+sudo cp /tmp/tvcast-remote.service /etc/systemd/system/
+sudo systemctl daemon-reload && sudo systemctl enable --now tvcast-remote
+journalctl -u tvcast-remote -f                # una línea por tecla
+```
+
+Se reconecta solo con el emparejamiento guardado (tras reiniciar, si el mando
+se duerme o se aleja). No hace falta poner nombre ni dirección en ninguna
+configuración: usa el dispositivo emparejado que se llama "Sunday". Para
+apagarlo sin tocar las fotos: `sudo systemctl disable --now tvcast-remote`.
+
 ## 7. En la otra casa
 
 1. Conecta HDMI y corriente. Enciende la tele **antes** o a la vez que la caja.
@@ -207,4 +262,5 @@ Para actualizar tvcast: copia el binario nuevo igual que en el paso 4 (a
 | Un vídeo va a saltos | Esperado con vídeos 1080p HEVC o 4K (ver docs/DESIGN.md §5) |
 | Vídeos sin sonido | `mpv --audio-device=help` para ver la salida HDMI y añádela en `-mpv-args` (`--audio-device=alsa/...`) |
 | Hora mal en la caja | Normal sin internet; no afecta a tvcast |
+| El mando no hace nada | `journalctl -u tvcast-remote -n 30`: "no paired device" es que hay que emparejarlo otra vez (6c); si salen líneas "retrying" mientras pulsas, no logra conectar: pilas, o quítalas 10 s |
 | La tele sale en inglés | Falta `TVCAST_LANG=es` en `/etc/tvcast.env` (y `sudo systemctl restart tvcast`) |

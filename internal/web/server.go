@@ -340,7 +340,14 @@ func (s *Server) showItem(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) pause(w http.ResponseWriter, r *http.Request) {
-	s.Player.SetPaused(r.URL.Query().Get("v") != "0")
+	switch r.URL.Query().Get("v") {
+	case "toggle":
+		s.Player.TogglePause()
+	case "0":
+		s.Player.SetPaused(false)
+	default: // "1" or nothing, as before
+		s.Player.SetPaused(true)
+	}
 	w.WriteHeader(204)
 }
 
