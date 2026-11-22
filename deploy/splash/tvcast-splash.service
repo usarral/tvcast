@@ -11,6 +11,7 @@ ConditionPathExists=/usr/share/tvcast/splash.raw
 
 [Service]
 Type=oneshot
+RemainAfterExit=yes
 ExecStart=/bin/sh -c 'cat /usr/share/tvcast/splash.raw > /dev/fb0'
 
 [Install]
