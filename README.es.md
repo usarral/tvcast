@@ -90,3 +90,7 @@ abriendo la URL del QR (`/?k=<token>`) o con el código de 6 cifras de la tele
 
 Ejemplo para un mando o script en la propia caja:
 `curl -X POST localhost:8080/api/next`.
+
+## Licencia
+
+[GNU AGPL-3.0-only](LICENSE), copyright 2026 usarral. Puedes usarlo, estudiarlo, modificarlo y compartirlo, pero toda obra derivada, incluso la que se ofrezca a usuarios por red, debe publicarse con la misma licencia.

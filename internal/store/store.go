@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 usarral
+
 // Package store keeps the uploaded photos and videos on disk.
 //
 // Security rules:

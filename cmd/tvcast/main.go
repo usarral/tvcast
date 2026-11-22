@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 usarral
+
 // tvcast sends photos and videos from a phone to the TV.
 package main
 

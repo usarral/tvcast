@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 usarral
+
 // tvcast-remote listens to the official Sunday Box Bluetooth LE remote through
 // BlueZ and turns its keys into calls to tvcast's local API.
 //

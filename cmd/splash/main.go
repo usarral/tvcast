@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 usarral
+
 // splash paints the box's boot image on the framebuffer as soon as systemd
 // starts (deploy/splash/tvcast-splash.service):
 //

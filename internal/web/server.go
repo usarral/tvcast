@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 usarral
+
 // Package web serves the phone page, the API and the /tv web viewer.
 package web
 

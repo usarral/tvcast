@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 usarral
+
 // Package remote turns the official Sunday Box Bluetooth LE remote into
 // tvcast actions.
 //

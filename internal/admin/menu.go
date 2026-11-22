@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 usarral
+
 // Package admin is the hidden maintenance panel drawn on the TV.
 //
 // It opens with Ctrl+Alt+A on a keyboard or a key sequence on the remote

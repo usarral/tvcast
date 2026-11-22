@@ -40,7 +40,7 @@
 
 - [ ] GitHub Actions workflow: `go vet`, `go test` and arm64 build on every
       push; binary in Releases.
-- [ ] Pick a license if it goes public (MIT or GPL-3.0).
+- [x] License: AGPL-3.0-only (see `LICENSE`).
 - [ ] Video: measure with real videos from the family's phones.
 - [ ] Re-encode video on the phone (WebCodecs) if video is worth it.
 - [ ] Bring the box's console commands (`ayuda`, `casa`, `tele`...) into the
