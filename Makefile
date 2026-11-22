@@ -18,6 +18,7 @@ test:
 	go vet ./...
 	go test ./...
 	sh deploy/bluetooth/guard_test.sh
+	sh deploy/network/netwd_test.sh
 
 # Local test with the web viewer: open http://localhost:8080/tv in one tab
 # and http://localhost:8080 in another (or from the phone with the URL in the log).

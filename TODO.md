@@ -14,9 +14,12 @@
   - [x] Run `tvcast-remote -dry-run` on the desktop with the paired remote:
         all keys, reconnects alone in ~2 s.
   - [x] Against a local tvcast with `/tv` open: works.
-  - [ ] On the box with the internal Bluetooth (no USB adapter): watchdog
-        and guard first, then pair and test in phases (docs/INSTALL.md, 6c).
-        If it hangs: €5 USB adapter.
+  - [x] On the box with the internal Bluetooth: the remote works, but with
+        photo uploads the network drops (system alive). Guard turned BT off
+        after two unclean boots; `tvcast-netwd` added (docs/LESSONS.md).
+  - [ ] Solder the wifi antenna, then repeat with internal BT and uploads
+        limited with `tc`. If the network still drops: €5 USB adapter on
+        the xHCI port.
   - [ ] Leave it a day: does the remote sleep when idle, how long does the
         first key take after waking, does the box stay up.
   - [ ] Maybe later: Up/Down, Heart and Vol (nothing obvious yet), HDMI-CEC

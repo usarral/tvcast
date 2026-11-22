@@ -247,7 +247,8 @@ From the repo, on the computer (`make arm64` first):
 ```sh
 scp bin/tvcast-linux-arm64 bin/tvcast-remote-linux-arm64 deploy/systemd/tvcast-remote.service \
     deploy/bluetooth/tvcast-bt-guard deploy/bluetooth/tvcast-bt-guard.service \
-    deploy/bluetooth/watchdog.conf tvbox:/tmp/
+    deploy/bluetooth/watchdog.conf deploy/network/tvcast-netwd \
+    deploy/network/tvcast-netwd.service deploy/network/tvcast-netwd.timer tvbox:/tmp/
 ```
 
 The current binary defaults to English: before installing it on a box that
@@ -275,6 +276,27 @@ ls /var/log/journal                     # persistent journal (to read a hang aft
 
 The files are in `deploy/bluetooth/`. Undo: delete them and reboot.
 
+### Network watchdog
+
+With the internal Bluetooth on and photos uploading, the box lost the wifi
+while Linux kept running. The hardware watchdog only catches a frozen kernel,
+so it never fired and the box stayed unreachable. `tvcast-netwd` checks the
+wifi every 30 s (AP mode: interface in AP mode with an IP; joined to a wifi:
+IP and the gateway answers a ping) and reboots after 2 minutes without it.
+It waits 5 minutes after boot, and stops after 2 reboots in a row without the
+network coming back (no point looping if the router is off).
+
+```sh
+# from deploy/network, copied to /tmp:
+sudo install -m755 /tmp/tvcast-netwd /usr/local/sbin/
+sudo cp /tmp/tvcast-netwd.service /tmp/tvcast-netwd.timer /etc/systemd/system/
+sudo systemctl daemon-reload && sudo systemctl enable --now tvcast-netwd.timer
+journalctl -u tvcast-netwd -f        # silent while the network is OK
+```
+
+Turn off: `sudo systemctl disable --now tvcast-netwd.timer`, or
+`TVCAST_NETWD_DISABLE=1` in `/etc/tvcast.env`.
+
 ### 3. Look at the chip before using it
 
 ```sh
@@ -295,13 +317,27 @@ sudo dmesg | grep -iE 'bluetooth|hci|bcm'
 It talks to one host at a time: first remove it on the computer it is paired
 with (`bluetoothctl remove <address>` there, or turn its Bluetooth off).
 
+Pairing needs an agent **in the same bluetoothctl session**: a separate
+`bluetoothctl pair <address>` fails with `Authentication Failed (0x05)`.
+
 ```sh
 sudo systemctl enable --now bluetooth
-bluetoothctl            # then: scan on, wait for "Sunday",
-                        #       pair <address>, trust <address>, scan off, quit
+bluetoothctl            # then, all in this one session:
+#   agent NoInputNoOutput
+#   default-agent
+#   scan on             (wait for "Sunday")
+#   pair <address>
+#   trust <address>
+#   scan off
+#   quit
 ```
 
-No PIN. If it doesn't show up, take the batteries out for 10 s.
+No PIN. If it doesn't show up, take the batteries out for 10 s. Later on,
+the admin panel's "Pair the remote again" does the same.
+
+If `bluetoothctl list` shows no controller, the internal chip didn't come up
+(`dmesg`: `Failed to set baudrate`, error -110). Reloading the driver brings
+it back: `sudo modprobe -r hci_uart btbcm && sudo modprobe hci_uart`.
 
 ### 5. Install tvcast-remote
 

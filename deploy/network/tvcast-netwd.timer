@@ -1,0 +1,15 @@
+# Checks the wifi every 30 s. Install (from deploy/network):
+#   sudo install -m755 tvcast-netwd /usr/local/sbin/
+#   sudo cp tvcast-netwd.service tvcast-netwd.timer /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now tvcast-netwd.timer
+# Turn off: sudo systemctl disable --now tvcast-netwd.timer
+[Unit]
+Description=tvcast - check the wifi every 30 s
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=30s
+AccuracySec=5s
+
+[Install]
+WantedBy=timers.target
