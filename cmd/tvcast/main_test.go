@@ -17,19 +17,19 @@ func TestWatchURLDetectsNetworkComingUp(t *testing.T) {
 
 	select {
 	case b := <-got:
-		t.Fatalf("aviso sin cambio de IP: %s", b)
+		t.Fatalf("notified without an IP change: %s", b)
 	case <-time.After(50 * time.Millisecond):
 	}
 	mu.Lock()
-	ip = "10.42.0.1" // se levanta "Tele"
+	ip = "10.42.0.1" // "Tele" comes up
 	mu.Unlock()
 	select {
 	case b := <-got:
 		if b != "http://10.42.0.1" {
-			t.Fatalf("URL inesperada %s", b)
+			t.Fatalf("unexpected URL %s", b)
 		}
 	case <-time.After(time.Second):
-		t.Fatal("no detectó el cambio de IP")
+		t.Fatal("IP change not detected")
 	}
 }
 
@@ -41,6 +41,6 @@ func TestLoadPINStable(t *testing.T) {
 	}
 	b, _ := loadPIN(p)
 	if a != b {
-		t.Fatalf("el PIN cambió al reiniciar: %s -> %s", a, b)
+		t.Fatalf("PIN changed on restart: %s -> %s", a, b)
 	}
 }

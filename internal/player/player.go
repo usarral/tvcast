@@ -1,11 +1,11 @@
-// Package player decide qué se ve en la tele: lo último que se envía se
-// muestra al momento y, si no hay novedades, rota en pase de diapositivas.
+// Package player decides what the TV shows: whatever is sent last is shown
+// right away and, when nothing new arrives, items rotate as a slideshow.
 //
-// Además:
-//   - cada QREvery fotos del pase automático intercala la pantalla de QR
-//     durante un intervalo, para que siempre se pueda descubrir cómo enviar;
-//   - HoldQR fija la pantalla de QR "sí o sí" (atajo de teclado en la caja)
-//     hasta que se quite, aunque lleguen fotos nuevas.
+// Also:
+//   - every QREvery automatic slideshow photos it inserts the QR screen for
+//     one interval, so people can always find out how to send;
+//   - HoldQR pins the QR screen no matter what (keyboard shortcut on the box)
+//     until released, even if new photos arrive.
 package player
 
 import (
@@ -16,19 +16,19 @@ import (
 	"github.com/usarral/tvcast/internal/store"
 )
 
-// Display es la pantalla física (mpv) o el visor web (/tv).
-// item == nil significa "pantalla de espera" (QR).
+// Display is the physical screen (mpv) or the web viewer (/tv).
+// item == nil means "waiting screen" (QR).
 type Display interface {
 	Show(item *store.Item) error
 }
 
-// State es lo que ven el móvil y el visor web.
+// State is what the phone and the web viewer see.
 type State struct {
 	CurrentID string `json:"currentId"`
 	Paused    bool   `json:"paused"`
 	Interval  int    `json:"intervalSec"`
 	QRHeld    bool   `json:"qrHeld"`
-	QRSlide   bool   `json:"qrSlide"` // la pantalla de QR intercalada en el pase
+	QRSlide   bool   `json:"qrSlide"` // the QR screen inserted in the slideshow
 }
 
 type Player struct {
@@ -38,18 +38,18 @@ type Player struct {
 
 	mu       sync.Mutex
 	displays []Display
-	current  string // ID mostrado ("" = pantalla de QR)
+	current  string // shown ID ("" = QR screen)
 	paused   bool
-	held     bool   // QR fijo por atajo
-	qrSlide  bool   // QR intercalado; al acabar se sigue desde resume
-	resume   string // ID desde el que seguir tras el QR
-	auto     int    // fotos pasadas automáticamente desde el último QR
+	held     bool   // QR pinned by shortcut
+	qrSlide  bool   // inserted QR; when done, continue from resume
+	resume   string // ID to continue from after the QR
+	auto     int    // photos advanced automatically since the last QR
 	shownAt  time.Time
 	onChange func(State)
 	wake     chan struct{}
 }
 
-// New: qrEvery = 0 desactiva el QR intercalado.
+// New: qrEvery = 0 disables the inserted QR.
 func New(st *store.Store, interval time.Duration, qrEvery int) *Player {
 	return &Player{st: st, interval: interval, qrEvery: qrEvery, wake: make(chan struct{}, 1)}
 }
@@ -66,8 +66,8 @@ func (p *Player) stateLocked() State {
 		QRHeld: p.held, QRSlide: p.qrSlide}
 }
 
-// Run hace avanzar el pase. Las imágenes duran `interval`; los vídeos
-// avanzan cuando la pantalla avisa con Ended().
+// Run advances the slideshow. Images last `interval`; videos advance when
+// the display reports Ended().
 func (p *Player) Run(stop <-chan struct{}) {
 	p.Refresh()
 	t := time.NewTicker(time.Second)
@@ -89,7 +89,7 @@ func (p *Player) tick() {
 		p.mu.Unlock()
 		return
 	}
-	if p.qrSlide { // terminó el QR intercalado: seguir el pase
+	if p.qrSlide { // the inserted QR is over: continue the slideshow
 		p.qrSlide = false
 		p.mu.Unlock()
 		p.step(+1)
@@ -98,15 +98,15 @@ func (p *Player) tick() {
 	cur := p.current
 	p.mu.Unlock()
 	if cur == "" {
-		return // pantalla de espera sin fotos
+		return // waiting screen, no photos
 	}
 	if it, ok := p.st.Get(cur); !ok || it.Kind != store.KindImage {
-		return // los vídeos avanzan con Ended()
+		return // videos advance with Ended()
 	}
 	p.autoNext()
 }
 
-// autoNext avanza el pase automático e intercala el QR cuando toca.
+// autoNext advances the slideshow and inserts the QR when due.
 func (p *Player) autoNext() {
 	p.mu.Lock()
 	p.auto++
@@ -122,7 +122,7 @@ func (p *Player) autoNext() {
 	p.step(+1)
 }
 
-// Show pone un elemento concreto (p. ej. recién subido).
+// Show shows a given item (e.g. just uploaded).
 func (p *Player) Show(id string) bool {
 	it, ok := p.st.Get(id)
 	if !ok {
@@ -135,18 +135,23 @@ func (p *Player) Show(id string) bool {
 func (p *Player) Next() { p.step(+1) }
 func (p *Player) Prev() { p.step(-1) }
 
-func (p *Player) SetPaused(v bool) {
+func (p *Player) SetPaused(v bool) { p.setPaused(func(bool) bool { return v }) }
+
+// TogglePause flips pause atomically (the remote's OK and Play/Pause).
+func (p *Player) TogglePause() { p.setPaused(func(was bool) bool { return !was }) }
+
+func (p *Player) setPaused(f func(was bool) bool) {
 	p.mu.Lock()
-	p.paused = v
+	p.paused = f(p.paused)
 	p.shownAt = time.Now()
-	s, f := p.stateLocked(), p.onChange
+	s, cb := p.stateLocked(), p.onChange
 	p.mu.Unlock()
-	if f != nil {
-		f(s)
+	if cb != nil {
+		cb(s)
 	}
 }
 
-// HoldQR fija (true) o suelta (false) la pantalla de QR.
+// HoldQR pins (true) or releases (false) the QR screen.
 func (p *Player) HoldQR(v bool) {
 	p.mu.Lock()
 	was := p.held
@@ -173,24 +178,24 @@ func (p *Player) HoldQR(v bool) {
 
 func (p *Player) Held() bool { p.mu.Lock(); defer p.mu.Unlock(); return p.held }
 
-// Ended lo llama una pantalla cuando termina un vídeo.
+// Ended is called by a display when a video finishes.
 func (p *Player) Ended(id string) {
 	p.mu.Lock()
 	cur, paused, held := p.current, p.paused, p.held
 	p.mu.Unlock()
 	if id != cur || held {
-		return // aviso viejo, ya se cambió
+		return // stale notice, already moved on
 	}
 	if paused {
 		if it, ok := p.st.Get(cur); ok {
-			p.show(&it, true) // repetir
+			p.show(&it, true) // repeat
 		}
 		return
 	}
 	p.autoNext()
 }
 
-// Refresh se llama cuando cambia la lista (borrado).
+// Refresh is called when the list changes (deletion).
 func (p *Player) Refresh() {
 	p.mu.Lock()
 	cur, slide := p.current, p.qrSlide
@@ -203,8 +208,8 @@ func (p *Player) Refresh() {
 	p.step(+1)
 }
 
-// Redraw vuelve a pintar lo que se ve (p. ej. cambió la IP y hay QR nuevo).
-// Un vídeo no se reinicia: su QR de esquina se actualizará en el siguiente.
+// Redraw repaints what is on screen (e.g. the IP changed and there is a new QR).
+// A video is not restarted: its corner QR is updated on the next item.
 func (p *Player) Redraw() {
 	p.mu.Lock()
 	cur, held := p.current, p.held
@@ -239,7 +244,7 @@ func (p *Player) step(dir int) {
 	var next int
 	switch {
 	case idx < 0 && dir > 0:
-		next = len(items) - 1 // lo más reciente
+		next = len(items) - 1 // the most recent
 	case idx < 0:
 		next = 0
 	default:
@@ -248,8 +253,8 @@ func (p *Player) step(dir int) {
 	p.show(&items[next], true)
 }
 
-// show cambia lo que se ve. manual=true (subida, botones) cancela el QR
-// intercalado. Con el QR fijo solo se anota dónde seguir después.
+// show changes what is on screen. manual=true (upload, buttons) cancels the
+// inserted QR. With the QR pinned it only records where to continue later.
 func (p *Player) show(it *store.Item, manual bool) {
 	p.mu.Lock()
 	if p.held {
@@ -266,7 +271,7 @@ func (p *Player) show(it *store.Item, manual bool) {
 	p.render(it)
 }
 
-// render pinta en todas las pantallas sin mirar el modo.
+// render paints on every display regardless of the mode.
 func (p *Player) render(it *store.Item) {
 	p.mu.Lock()
 	if it == nil {
@@ -280,7 +285,7 @@ func (p *Player) render(it *store.Item) {
 	p.mu.Unlock()
 	for _, d := range ds {
 		if err := d.Show(it); err != nil {
-			log.Printf("pantalla: %v", err)
+			log.Printf("display: %v", err)
 		}
 	}
 	if f != nil {

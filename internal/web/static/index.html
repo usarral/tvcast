@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="es">
+<html lang="{{.Lang}}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Fotos a la tele</title>
+<title>{{index .S "page.title"}}</title>
 <style>
   :root { --bg:#14171c; --card:#1f242c; --fg:#f2f2f2; --muted:#a0a6b0; --accent:#ffb347; --danger:#ff6b6b; }
   * { box-sizing: border-box; }
@@ -28,29 +28,31 @@
 </head>
 <body>
 <header>
-  <h1>Enviar a la tele</h1>
-  <label class="pick">Elegir fotos o vídeos
+  <h1>{{index .S "page.heading"}}</h1>
+  <label class="pick">{{index .S "page.pick"}}
     <input id="files" type="file" accept="image/*,video/*" multiple>
   </label>
   <progress id="prog" value="0" max="1" hidden></progress>
   <p id="status"></p>
   <div class="controls">
-    <button id="prev" aria-label="Anterior">◀</button>
-    <button id="pause">⏸ Pausa</button>
-    <button id="next" aria-label="Siguiente">▶</button>
+    <button id="prev" aria-label="{{index .S "page.prev"}}">◀</button>
+    <button id="pause">{{index .S "page.pause"}}</button>
+    <button id="next" aria-label="{{index .S "page.next"}}">▶</button>
   </div>
 </header>
 <div class="grid" id="grid"></div>
 
 <script>
 const MAX_W = 1920, MAX_H = 1080, THUMB = 320;
+const S = {{.S}}; // translated strings (Go: internal/i18n)
+const t = (k, v = {}) => (S[k] || k).replace(/\{(\w+)\}/g, (_, n) => v[n]);
 const $ = id => document.getElementById(id);
 let snap = { state:{}, items:[] };
 
-// --- Redimensionar en el móvil ------------------------------------------
-// La caja tiene CPU y RAM justas: decodificar una foto de 12-48 Mpx allí es
-// lento. El móvil la reduce a 1080p (y aplica la rotación EXIF), y de paso
-// Safari convierte HEIC a JPEG. Si algo falla, se envía el original.
+// --- Resize on the phone ----------------------------------------------------
+// The box is short on CPU and RAM: decoding a 12-48 Mpx photo there is slow.
+// The phone scales it to 1080p (applying the EXIF rotation), and Safari
+// converts HEIC to JPEG on the way. If anything fails, the original is sent.
 async function decode(file) {
   try { return await createImageBitmap(file, { imageOrientation: 'from-image' }); }
   catch (_) {
@@ -84,13 +86,13 @@ async function prepare(file) {
 function send(p, name) {
   return new Promise((resolve, reject) => {
     const fd = new FormData();
-    if (p.thumb) fd.append('thumb', p.thumb, 'thumb.jpg'); // antes que el fichero
+    if (p.thumb) fd.append('thumb', p.thumb, 'thumb.jpg'); // before the file
     fd.append('file', p.blob, p.name || name);
     const x = new XMLHttpRequest();
     x.open('POST', '/api/upload');
     x.upload.onprogress = e => { if (e.lengthComputable) $('prog').value = e.loaded / e.total; };
     x.onload = () => x.status < 300 ? resolve() : reject(new Error(x.responseText.trim() || x.status));
-    x.onerror = () => reject(new Error('sin conexión con la caja'));
+    x.onerror = () => reject(new Error(t('page.no_box')));
     x.send(fd);
   });
 }
@@ -100,13 +102,13 @@ $('files').onchange = async e => {
   $('prog').hidden = false;
   let ok = 0;
   for (const [i, f] of files.entries()) {
-    $('status').textContent = `Enviando ${i + 1} de ${files.length}…`;
+    $('status').textContent = t('page.sending', { i: i + 1, n: files.length });
     $('prog').value = 0;
     try { await send(await prepare(f), f.name); ok++; }
     catch (err) { $('status').textContent = `${f.name}: ${err.message}`; await new Promise(r => setTimeout(r, 2500)); }
   }
   $('prog').hidden = true;
-  $('status').textContent = ok ? `Enviadas ${ok} de ${files.length}` : 'No se envió nada';
+  $('status').textContent = ok ? t('page.sent', { ok, n: files.length }) : t('page.sent_none');
 };
 
 const post = (url, method = 'POST') => fetch(url, { method }).then(r => { if (!r.ok && r.status === 401) location.reload(); });
@@ -115,7 +117,7 @@ $('prev').onclick = () => post('/api/prev');
 $('pause').onclick = () => post('/api/pause?v=' + (snap.state.paused ? 0 : 1));
 
 function render() {
-  $('pause').textContent = snap.state.paused ? '▶ Seguir' : '⏸ Pausa';
+  $('pause').textContent = snap.state.paused ? t('page.resume') : t('page.pause');
   const g = $('grid'); g.replaceChildren();
   for (const it of [...snap.items].reverse()) {
     const t = document.createElement('div');
@@ -130,8 +132,8 @@ function render() {
     }
     t.onclick = () => post(`/api/show/${it.id}`);
     const d = document.createElement('button');
-    d.className = 'del'; d.textContent = '✕'; d.setAttribute('aria-label', 'Borrar');
-    d.onclick = ev => { ev.stopPropagation(); if (confirm('¿Borrar de la tele?')) post(`/api/items/${it.id}`, 'DELETE'); };
+    d.className = 'del'; d.textContent = '✕'; d.setAttribute('aria-label', t('page.delete'));
+    d.onclick = ev => { ev.stopPropagation(); if (confirm(t('page.confirm_del'))) post(`/api/items/${it.id}`, 'DELETE'); };
     t.append(d);
     g.append(t);
   }

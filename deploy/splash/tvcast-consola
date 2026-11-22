@@ -1,0 +1,6 @@
+#!/bin/sh
+# Ctrl+Alt+C: stop tvcast and show the local login. The login lives on tty2
+# (tty1 stays clean for the boot image), so we have to switch to it.
+systemctl stop tvcast
+setterm --cursor on >/dev/tty2 2>/dev/null
+chvt 2

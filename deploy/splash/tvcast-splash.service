@@ -1,0 +1,18 @@
+# Boot image: paints splash.raw on the framebuffer as soon as systemd starts
+# (~7 s after power on) and stays until mpv takes the screen.
+# Needs: console=serial in /boot/armbianEnv.txt (no console=tty1),
+# extraargs with vt.global_cursor_default=0, and the login on tty2 instead of tty1.
+# See deploy/splash/README.md.
+[Unit]
+Description=tvcast - boot image on the TV
+DefaultDependencies=no
+ConditionPathExists=/dev/fb0
+ConditionPathExists=/usr/share/tvcast/splash.raw
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/bin/sh -c 'cat /usr/share/tvcast/splash.raw > /dev/fb0'
+
+[Install]
+WantedBy=sysinit.target

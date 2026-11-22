@@ -1,79 +1,80 @@
-# Comprobaciones en la caja
+# Checks on the box
 
-Comprobaciones más a fondo que las de INSTALL.md (vídeo, mando, CEC). Todo es
-de solo lectura salvo donde pone **(cambia algo)**.
+More thorough checks than the ones in INSTALL.md (video, remote, CEC).
+Everything is read-only except where it says **(changes something)**.
 
-## 1. Sistema y memoria
+## 1. System and memory
 
 ```sh
 uname -a; cat /etc/armbian-release | head -5
-free -h                     # ¿1 o 2 GB? decide si Chromium es opción siquiera
-df -h /                     # espacio para las fotos (la cuota por defecto es 4 GB)
+free -h                     # 1 or 2 GB? decides whether Chromium is even an option
+df -h /                     # room for photos (the default quota is 4 GB)
 cat /proc/device-tree/model
 ```
 
-## 2. Wifi: qué chip es y si puede hacer de punto de acceso
+## 2. Wifi: which chip, and can it be an access point
 
 ```sh
 nmcli device show wlan0 | head -20
 readlink -f /sys/class/net/wlan0/device/driver     # brcmfmac / rtl8xxx / ssv6051...
 dmesg | grep -iE 'brcm|wlan|sdio|firmware' | tail -30
-iw list | grep -A10 'Supported interface modes'    # ¿aparece "* AP"?
-iw list | grep -A8 'valid interface combinations'  # ¿AP y managed a la vez? ¿en cuántos canales?
-iw dev wlan0 info                                  # canal actual de la wifi de casa
+iw list | grep -A10 'Supported interface modes'    # is "* AP" there?
+iw list | grep -A8 'valid interface combinations'  # AP and managed at once? on how many channels?
+iw dev wlan0 info                                  # current channel of the home wifi
 ```
 
-Qué buscar:
-- `* AP` en los modos soportados: el punto de acceso es posible.
-- Una combinación tipo `#{ managed } <= 1, #{ AP } <= 1, total <= 2, #channels <= 1`
-  significa que AP+cliente es posible solo en el mismo canal que el router.
-  No hace falta en una casa sin wifi.
+What to look for:
+- `* AP` among the supported modes: an access point is possible.
+- A combination like `#{ managed } <= 1, #{ AP } <= 1, total <= 2, #channels <= 1`
+  means AP+client is possible only on the router's channel. Not needed in a
+  house without wifi.
 
-## 3. Pantalla, GPU y vídeo
+## 3. Display, GPU and video
 
 ```sh
-cat /sys/class/drm/card*-HDMI-A-1/modes | head   # resoluciones que ofrece la tele
-ls /dev/dri/                                    # card0 y renderD128 = GPU (lima) disponible
+cat /sys/class/drm/card*-HDMI-A-1/modes | head   # resolutions the TV offers
+ls /dev/dri/                                    # card0 and renderD128 = GPU (lima) available
 dmesg | grep -iE 'lima|hdmi' | tail
 ls /dev/video* /dev/media* 2>/dev/null
 for d in /dev/video*; do v4l2-ctl -d $d --info 2>/dev/null | grep -E 'Driver|Card'; done
 ```
 
-**(cambia algo)** instalar mpv y herramientas: `sudo apt install mpv v4l-utils ir-keytable evtest`
+**(changes something)** install mpv and tools: `sudo apt install mpv v4l-utils ir-keytable evtest`
 
-Prueba de vídeo (con la tele delante; sirve por SSH, mpv pinta en la tele):
+Video test (with the TV in front; works over SSH, mpv draws on the TV):
 
 ```sh
-# Copia un vídeo real de vuestros móviles a la caja como ~/prueba.mp4
-mpv --vo=gpu --gpu-context=drm --hwdec=auto-safe ~/prueba.mp4
-# Mira en la salida si hay "Dropped" o "Audio/Video desynchronisation"; CPU con htop en otra sesión.
-ffprobe -hide_banner ~/prueba.mp4 2>&1 | grep Video   # códec y resolución
+# Copy a real video from your phones to the box as ~/test.mp4
+mpv --vo=gpu --gpu-context=drm --hwdec=auto-safe ~/test.mp4
+# Look for "Dropped" or "Audio/Video desynchronisation" in the output; CPU with htop in another session.
+ffprobe -hide_banner ~/test.mp4 2>&1 | grep Video   # codec and resolution
 ```
 
-## 4. Mando oficial
+## 4. Original remote
 
 ```sh
 ls /sys/class/rc/ 2>/dev/null && cat /sys/class/rc/rc*/protocols
-ir-keytable                       # ¿hay receptor IR? ¿qué driver?
-sudo ir-keytable -c -p all -t     # (cambia protocolos hasta reiniciar) pulsa cada botón: anota el scancode
-sudo evtest                       # lista /dev/input/*: si el mando sale como teclado, pulsa y mira las teclas
-lsusb                             # si el mando trae pincho USB
-bluetoothctl devices 2>/dev/null  # si fuera Bluetooth
+ir-keytable                       # is there an IR receiver? which driver?
+sudo ir-keytable -c -p all -t     # (changes protocols until reboot) press each button: note the scancode
+sudo evtest                       # lists /dev/input/*: if the remote shows up as a keyboard, press and watch the keys
+lsusb                             # if the remote has a USB dongle
+bluetoothctl devices 2>/dev/null  # if it were Bluetooth
 ```
 
-Cuenta los botones y anota scancode → función (arriba, abajo, OK, atrás...).
+Count the buttons and write down scancode → function (up, down, OK, back...).
+(On the Sunday Box it turned out to be Bluetooth LE, not IR: see LESSONS.md.)
 
-## 5. HDMI-CEC (alternativa al mando original)
+## 5. HDMI-CEC (alternative to the original remote)
 
 ```sh
 ls /dev/cec* 2>/dev/null
-sudo apt install v4l-utils        # (cambia algo) trae cec-ctl
-cec-ctl -d /dev/cec0 --playback -S          # ¿ve la tele?
-cec-ctl -d /dev/cec0 -M                     # pulsa flechas en el mando de la TELE: ¿llegan?
+sudo apt install v4l-utils        # (changes something) provides cec-ctl
+cec-ctl -d /dev/cec0 --playback -S          # does it see the TV?
+cec-ctl -d /dev/cec0 -M                     # press arrows on the TV's remote: do they arrive?
 ```
 
-Puede que haya que activar CEC en el menú de la tele.
+CEC may need to be enabled in the TV's menu.
 
-## 6. Instalación
+## 6. Install
 
-Ver [INSTALL.md](INSTALL.md).
+See [INSTALL.md](INSTALL.md).

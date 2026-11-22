@@ -1,32 +1,46 @@
-# Pendiente
+# To do
 
-## Mañana (23 nov 2026)
+## Tomorrow (23 Nov 2026)
 
-- [ ] **Animación de arranque.** Que la tele no enseñe texto de consola al
-  encender. Opciones: Plymouth con un tema propio (tapa desde el kernel) o,
-  más simple, que tvcast/mpv muestre una imagen en cuanto haya DRM y
-  `quiet loglevel=3 vt.global_cursor_default=0` en `/boot/armbianEnv.txt`
-  (extraargs). Plymouth en Armbian con DRM mainline: comprobar que el kernel
-  tiene `simpledrm`/`rockchipdrm` pronto o la animación sale tarde.
-- [ ] **Mando oficial.** Averiguar si es IR, RF 2,4 GHz o Bluetooth
-  (`ir-keytable`, `evtest`, `lsusb`, `bluetoothctl`; ver docs/CHECKS.md §4),
-  mapear teclas (rc_keymaps o hwdb) y llamar a la API con triggerhappy:
-  flechas → `/api/prev` `/api/next`, OK → pausa, Home → `/api/tv/qr?v=toggle`.
-  Probar también HDMI-CEC (mando de la tele).
-- [ ] **hostapd como modo por defecto.** Llevar al repo la configuración que
-  funciona en la caja (hostapd.conf, servicio de arranque con espera a la
-  wifi de casa y vuelta atrás) y sustituir `deploy/network/hotspot.sh`
-  (NetworkManager en modo AP + WPA2 no funcionó con este BCM4334: ver
-  docs/LESSONS.md).
-- [ ] **QR con 127.0.0.1 al arrancar.** Corregido en código (tvcast mira la IP
-  cada 3 s y repinta el QR; antes cada 30 s y en la caja se resolvía
-  reiniciando el servicio). Desplegar y comprobar en un arranque en frío; si va
-  bien, quitar el reinicio de tvcast que hace el script de "Tele".
+- [x] **Boot screen.** Done without Plymouth: kernel console on serial only,
+  hidden cursor, image on `/dev/fb0` when systemd starts and login on tty2
+  (see `deploy/splash/README.md`). Tested on the box.
+- [x] **Console for a few seconds at boot.** It was tvcast killing mpv at
+  5 s; now it waits up to 30 s. Tested with a reboot.
+- [ ] **Original remote (Bluetooth LE, not IR).** Keys decoded on desktop
+  Linux with a USB adapter (docs/LESSONS.md) and `tvcast-remote` written:
+  Right/Left photo, OK and Play/Pause pause, Home QR, Back slideshow.
+  Next:
+  - [x] Run `tvcast-remote -dry-run` on the desktop with the paired remote:
+        all keys, reconnects alone in ~2 s.
+  - [x] Against a local tvcast with `/tv` open: works.
+  - [ ] On the box, with an automatic revert planned: keep the internal
+        BCM4334 Bluetooth off (`hci_uart` blacklisted), plug in the USB
+        adapter, pair, install the service (docs/INSTALL.md, 6c).
+  - [ ] Leave it a day: does the remote sleep when idle, how long does the
+        first key take after waking, does the box stay up.
+  - [ ] Maybe later: Up/Down, Heart and Vol (nothing obvious yet), HDMI-CEC
+        with the TV's own remote.
+- [ ] **hostapd as the default.** Bring the config that works on the box into
+  the repo (hostapd.conf, boot service that waits for the home wifi and falls
+  back) and replace `deploy/network/hotspot.sh` (NetworkManager in AP mode +
+  WPA2 didn't work with this BCM4334: see docs/LESSONS.md).
+- [ ] **QR with 127.0.0.1 at boot.** Fixed in code (tvcast checks the IP every
+  3 s and redraws the QR; it used to be every 30 s and on the box it was
+  solved by restarting the service). Deploy and check on a cold boot; if it
+  works, drop the tvcast restart in the "Tele" script.
+- [ ] **Language on the box.** Before deploying the English-default binary,
+  add `TVCAST_LANG=es` to `/etc/tvcast.env` on the box, and use `-lang es`
+  if the splash image is ever regenerated.
 
-## Más adelante
+## Later
 
-- [ ] Workflow de GitHub Actions: `go vet`, `go test` y build arm64 en cada push;
-      binario en Releases.
-- [ ] Decidir licencia si se publica (MIT o GPL-3.0).
-- [ ] Vídeo: medir con vídeos reales de los móviles de la familia.
-- [ ] Recomprimir vídeo en el móvil (WebCodecs) si el vídeo compensa.
+- [ ] GitHub Actions workflow: `go vet`, `go test` and arm64 build on every
+      push; binary in Releases.
+- [ ] Pick a license if it goes public (MIT or GPL-3.0).
+- [ ] Video: measure with real videos from the family's phones.
+- [ ] Re-encode video on the phone (WebCodecs) if video is worth it.
+- [ ] Bring the box's console commands (`ayuda`, `casa`, `tele`...) into the
+      repo with English aliases, keeping the Spanish names.
+- [ ] Translate `tools/mando/sunday_remote.py` to English (comments, output;
+      keep `--efecto` as an alias if the flag is renamed).

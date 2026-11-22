@@ -1,47 +1,50 @@
-# Instalación desde cero
+# Installing from scratch
 
-Desde Armbian recién instalado hasta la tele mostrando el QR, para una casa
-**sin wifi ni internet**: la caja crea su propia wifi ("Tele").
+*[En español](es/INSTALL.md)*
 
-**Todo se prepara en tu casa**, donde la caja tiene internet y SSH. En la otra
-casa no podrás instalar nada, así que no te dejes ningún paquete.
+From a fresh Armbian to the TV showing the QR, for a house **without wifi or
+internet**: the box creates its own wifi ("Tele").
 
-Necesitas:
-- La caja con Armbian arrancando, en tu wifi y con SSH (`ssh usuario@IP_DE_LA_CAJA`).
-- La tele (o cualquier monitor HDMI) conectada para ver los resultados.
-- En el Mac: el binario `tvcast-linux-arm64` y la carpeta `deploy/` del proyecto.
-- Recomendado: un teclado USB, por si te quedas sin SSH al cambiar la red.
+**Prepare everything at your place**, where the box has internet and SSH. You
+won't be able to install anything in the other house, so don't forget any
+package.
 
-En los comandos, `usuario` es tu usuario de Armbian.
+You need:
+- The box booting Armbian, on your wifi and with SSH (`ssh user@BOX_IP`).
+- The TV (or any HDMI monitor) connected to see the results.
+- On your computer: the `tvcast-linux-arm64` binary and the project's `deploy/` folder.
+- Recommended: a USB keyboard, in case you lose SSH while changing the network.
+
+In the commands, `user` is your Armbian user.
 
 ---
 
-## 1. Puesta a punto (en la caja, por SSH)
+## 1. Setup (on the box, over SSH)
 
 ```sh
 sudo apt update && sudo apt full-upgrade -y
-sudo timedatectl set-timezone Europe/Madrid
+sudo timedatectl set-timezone Europe/Madrid   # your time zone
 sudo apt install -y mpv iw network-manager fake-hwclock
-# Para la fase 2 (mando y CEC), que allí no habrá internet:
+# For phase 2 (remote and CEC), since there will be no internet there:
 sudo apt install -y v4l-utils ir-keytable evtest triggerhappy
 ```
 
-País de la wifi (canales y potencia legales en España):
+Wifi country (legal channels and power; `ES` for Spain):
 
 ```sh
 echo "options cfg80211 ieee80211_regdom=ES" | sudo tee /etc/modprobe.d/regdom.conf
 ```
 
-## 2. Que NetworkManager gestione la wifi
+## 2. Let NetworkManager manage the wifi
 
 ```sh
 systemctl is-active NetworkManager
 nmcli device status
 ```
 
-- Si sale `active` y `wlan0` aparece como `connected`: sigue al paso 3.
-- Si no, la wifi la lleva otro servicio (netplan con systemd-networkd).
-  **Hazlo con el teclado en la caja**, porque vas a perder el SSH un momento:
+- If it says `active` and `wlan0` shows as `connected`: go to step 3.
+- If not, another service runs the wifi (netplan with systemd-networkd).
+  **Do this with the keyboard on the box**, because you will lose SSH for a moment:
 
   ```sh
   sudo tee /etc/netplan/90-nm.yaml >/dev/null <<'EOF'
@@ -51,147 +54,210 @@ nmcli device status
   EOF
   sudo chmod 600 /etc/netplan/90-nm.yaml
   sudo netplan apply
-  sudo nmcli device wifi connect "TU_WIFI" password "TU_CONTRASEÑA"
+  sudo nmcli device wifi connect "YOUR_WIFI" password "YOUR_PASSWORD"
   ```
 
-## 3. ¿El chip wifi puede crear una red? (paso bloqueante)
+## 3. Can the wifi chip create a network? (blocking step)
 
 ```sh
 readlink -f /sys/class/net/wlan0/device/driver
 iw list | grep -A10 'Supported interface modes'
 ```
 
-- Si en la lista aparece **`* AP`**: perfecto, sigue.
-- **Si no aparece**, este chip no puede hacer de punto de acceso. No sigas con
-  el paso 6. La solución es un pincho wifi USB con soporte AP en el kernel
-  (por ejemplo chip MediaTek MT7601U, MT7612U o MT7921AU) y repetir este paso
-  con su interfaz (`wlan1`).
+- If **`* AP`** is in the list: good, carry on.
+- **If it isn't**, this chip can't be an access point. Don't go on to step 6.
+  The fix is a USB wifi dongle with AP support in the kernel (for example a
+  MediaTek MT7601U, MT7612U or MT7921AU chip); repeat this step with its
+  interface (`wlan1`).
 
-Copia la salida de estos dos comandos en el hilo: así sé qué chip es.
+## 4. Install tvcast
 
-## 4. Instalar tvcast
-
-En el Mac, desde la carpeta del proyecto:
+On your computer, from the project folder:
 
 ```sh
-scp bin/tvcast-linux-arm64 deploy/systemd/tvcast.service deploy/network/hotspot.sh usuario@IP_DE_LA_CAJA:/tmp/
+scp bin/tvcast-linux-arm64 deploy/systemd/tvcast.service deploy/network/hotspot.sh user@BOX_IP:/tmp/
 ```
 
-En la caja:
+On the box:
 
 ```sh
 sudo install -m755 /tmp/tvcast-linux-arm64 /usr/local/bin/tvcast
 sudo useradd --system --home-dir /var/lib/tvcast --shell /usr/sbin/nologin tvcast
 sudo cp /tmp/tvcast.service /etc/systemd/system/tvcast.service
 
-# Nombre y contraseña de la wifi que creará la caja (8 caracteres o más).
-# Se usan para el QR de la tele.
+# Name and password of the wifi the box will create (8 characters or more).
+# They are used for the QR on the TV.
 sudo tee /etc/tvcast.env >/dev/null <<'EOF'
 TVCAST_WIFI_SSID=Tele
-TVCAST_WIFI_PASS=pon-aqui-una-contraseña
+TVCAST_WIFI_PASS=put-a-password-here
+# Language of the TV screen: en (default) or es. Phones get the web page in
+# their own language when supported.
+TVCAST_LANG=en
 EOF
 sudo chmod 600 /etc/tvcast.env
 
 sudo systemctl daemon-reload
 sudo systemctl enable --now tvcast
-journalctl -u tvcast -f        # Ctrl+C para salir
+journalctl -u tvcast -f        # Ctrl+C to quit
 ```
 
-En la tele debe salir la pantalla con dos QR. Ahora mismo el segundo QR lleva
-la IP de tu casa (IP_DE_LA_CAJA): escanéalo con el móvil en tu wifi y manda una
-foto para probar.
+The TV should show the screen with two QR codes. Right now the second QR has
+your home IP (BOX_IP): scan it with the phone on your wifi and send a photo
+to try it.
 
-**Si la tele se queda en negro o con texto** y el log dice algo de `gpu` o
-`EGL`: la GPU no va con mpv. Cambia en `/etc/systemd/system/tvcast.service`
-`--vo=gpu --gpu-context=drm` por `--vo=drm` y:
+**If the TV stays black or shows text** and the log mentions `gpu` or `EGL`:
+the GPU doesn't work with mpv. In `/etc/systemd/system/tvcast.service`
+replace `--vo=gpu --gpu-context=drm` with `--vo=drm` and:
 
 ```sh
 sudo systemctl daemon-reload && sudo systemctl restart tvcast
 ```
 
-## 5. Crear la wifi "Tele"
+## 5. Create the "Tele" wifi
 
-Usa **la misma contraseña** que en `/etc/tvcast.env`:
+> With the Sunday Box (BCM4334) this step **did not work** with a password:
+> NetworkManager's access point with WPA2 doesn't let phones in. The box uses
+> hostapd instead (see docs/LESSONS.md and TODO.md; bringing it into the repo
+> is pending). This script is fine for chips where NM works.
+
+Use **the same password** as in `/etc/tvcast.env`:
 
 ```sh
-sudo sh /tmp/hotspot.sh Tele 'pon-aqui-una-contraseña'
+sudo sh /tmp/hotspot.sh Tele 'put-a-password-here'
 ```
 
-Esto crea la red y deja la wifi de tu casa con más prioridad. Así, en tu casa
-se conecta a tu wifi y en la otra casa, al no encontrarla, crea "Tele".
+This creates the network and gives your home wifi higher priority. So at your
+place it joins your wifi, and in the other house, not finding it, it creates "Tele".
 
-## 6. Probarlo en tu casa antes de llevarla
+## 6. Test it at your place before taking it
 
-Simula la otra casa (perderás el SSH; si algo va mal, usa el teclado):
+Simulate the other house (you will lose SSH; if something goes wrong, use the keyboard):
 
 ```sh
 sudo nmcli connection up tvcast-ap
 ```
 
-1. En unos 30 s la tele cambia el QR a `http://10.42.0.1`.
-2. Con el móvil: escanea el primer QR (unirse a "Tele"). Si Android pregunta
-   por "sin internet", di que mantenga la conexión.
-3. Escanea el segundo QR y manda fotos.
-4. Para entrar por SSH: conecta el Mac a "Tele" y `ssh usuario@10.42.0.1`.
+1. In about 30 s the TV changes the QR to `http://10.42.0.1`.
+2. With the phone: scan the first QR (join "Tele"). If Android asks about
+   "no internet", tell it to stay connected.
+3. Scan the second QR and send photos.
+4. For SSH: connect your computer to "Tele" and `ssh user@10.42.0.1`.
 
-Prueba de arranque como en la otra casa (sin tu wifi):
+Boot test as in the other house (without your wifi):
 
 ```sh
-nmcli -t -f NAME,TYPE connection show    # anota el nombre de tu wifi
-sudo nmcli connection modify "TU_WIFI" connection.autoconnect no
+nmcli -t -f NAME,TYPE connection show    # note your wifi's name
+sudo nmcli connection modify "YOUR_WIFI" connection.autoconnect no
 sudo reboot
 ```
 
-Tras reiniciar debe salir sola la red "Tele" y la tele con los QR. Para
-volver a tu wifi (con el Mac conectado a "Tele", por SSH a 10.42.0.1):
+After the reboot the "Tele" network should come up by itself, and the TV show
+the QR codes. To go back to your wifi (computer connected to "Tele", SSH to 10.42.0.1):
 
 ```sh
-sudo nmcli connection modify "TU_WIFI" connection.autoconnect yes
-sudo nmcli connection down tvcast-ap     # se conecta sola a tu wifi
+sudo nmcli connection modify "YOUR_WIFI" connection.autoconnect yes
+sudo nmcli connection down tvcast-ap     # it rejoins your wifi by itself
 ```
 
-## 6b. Atajos de teclado (opcional)
+## 6b. Keyboard shortcuts (optional)
 
-Con un teclado USB o el receptor 2,4 GHz enchufado a la caja:
+With a USB keyboard or 2.4 GHz dongle plugged into the box:
 
-| Atajo | Qué hace |
+| Shortcut | What it does |
 |---|---|
-| **Ctrl+Alt+Q** | Pone el QR a pantalla completa y lo deja fijo, aunque haya fotos o lleguen nuevas (se guardan igual) |
-| **Ctrl+Alt+S** | Vuelve al pase de fotos |
+| **Ctrl+Alt+Q** | Shows the QR full screen and pins it, even if there are photos or new ones arrive (they are still saved) |
+| **Ctrl+Alt+S** | Back to the slideshow |
+| **Ctrl+Alt+C** | Stops tvcast and shows the local login (see `deploy/splash`) |
+| **Ctrl+Alt+T** | Starts or restarts tvcast |
 
 ```sh
-sudo apt install -y triggerhappy        # si no lo instalaste en el paso 1
-sudo cp /tmp/tvcast.conf /etc/triggerhappy/triggers.d/   # copiado desde deploy/triggerhappy/
+sudo apt install -y triggerhappy        # if you didn't in step 1
+sudo cp /tmp/tvcast.conf /etc/triggerhappy/triggers.d/   # copied from deploy/triggerhappy/
 sudo systemctl restart triggerhappy
 ```
 
-Sin teclado, lo mismo por SSH: `curl -X POST 'http://127.0.0.1/api/tv/qr?v=1'`
-(y `v=0` para volver). Solo funciona desde la propia caja.
+Without a keyboard, the same over SSH: `curl -X POST 'http://127.0.0.1/api/tv/qr?v=1'`
+(and `v=0` to go back). It only works from the box itself.
 
-## 7. En la otra casa
+## 6c. Official Sunday remote (optional)
 
-1. Conecta HDMI y corriente. Enciende la tele **antes** o a la vez que la caja.
-2. Al minuto aproximado salen los dos QR.
-3. Para la familia: "escanea el primero para conectarte a la wifi de la tele;
-   luego el segundo y elige fotos". En el móvil que se una sale "sin internet":
-   es normal.
-4. Con fotos ya enviadas, el QR sigue a mano: hay uno pequeño con un código de
-   6 cifras abajo a la derecha, y cada 12 fotos sale un momento la pantalla
-   completa de QR. Quien abra `http://10.42.0.1` sin QR puede teclear ese
-   código.
+The box's original remote is Bluetooth LE, not infrared, and Linux doesn't see
+it as a keyboard: `tvcast-remote` (a separate service) listens to it through
+BlueZ and calls tvcast's local API.
 
-Para mantenimiento allí: conecta el Mac a "Tele" y `ssh usuario@10.42.0.1`.
-Para actualizar tvcast: copia el binario nuevo igual que en el paso 4 (a
-10.42.0.1) y `sudo systemctl restart tvcast`.
-
-## Problemas típicos
-
-| Síntoma | Qué mirar |
+| Button | What it does |
 |---|---|
-| La tele no muestra nada | ¿Se encendió la tele después de la caja? `sudo systemctl restart tvcast`. Log: `journalctl -u tvcast -n 50` |
-| No aparece la red "Tele" | `nmcli connection show --active`, `journalctl -u NetworkManager -n 50`. ¿Paso 3 dio `* AP`? |
-| El móvil está en "Tele" pero la web no carga | Android puede mandar el tráfico por datos móviles: desactiva los datos un momento o acepta "mantener conexión" |
-| "HEIC no soportado" | Envía desde el navegador del móvil (Safari la convierte) o en el iPhone: Ajustes → Cámara → Formatos → Más compatible |
-| Un vídeo va a saltos | Esperado con vídeos 1080p HEVC o 4K (ver DESIGN §5) |
-| Vídeos sin sonido | `mpv --audio-device=help` para ver la salida HDMI y añádela en `-mpv-args` (`--audio-device=alsa/...`) |
-| Hora mal en la caja | Normal sin internet; no afecta a tvcast |
+| **Right / Left** | Next / previous photo |
+| **OK** or **Play/Pause** | Pause or resume the slideshow |
+| **Home** | Show the QR full screen and pin it; press again to go back |
+| **Back** | Back to the slideshow (drops the pinned QR and resumes) |
+| Up, Down, Heart, Vol+/−, Mic, Power | Nothing yet (they show up in the log) |
+
+The remote never opens the console or restarts tvcast: that stays on the
+keyboard shortcuts (6b), so a family member can't leave the TV on a login.
+
+**Use a USB Bluetooth adapter, not the internal chip.** The internal one
+(BCM4334, it shares the radio with the wifi) hung the whole box twice. Tested
+with a CSR adapter (USB id `0a12:0001`). Before turning Bluetooth on:
+
+```sh
+# Which adapters exist and how each is attached (usb vs serial/uart)
+ls -l /sys/class/bluetooth/
+# If the internal one shows up (not under usb), keep it off. Check first that
+# hci_uart is a module (lsmod | grep hci_uart); undo by deleting the file.
+echo "blacklist hci_uart" | sudo tee /etc/modprobe.d/tvcast-no-internal-bt.conf
+sudo reboot
+```
+
+After the reboot `bluetoothctl list` must show only the USB adapter. Then pair
+the remote once (no PIN; if it doesn't show up, take the batteries out for
+10 s):
+
+```sh
+sudo systemctl enable --now bluetooth
+bluetoothctl            # then: scan on, wait for "Sunday",
+                        #       pair <address>, trust <address>, scan off, quit
+```
+
+Install the service, first in dry-run mode to see keys arrive without acting:
+
+```sh
+sudo install -m755 /tmp/tvcast-remote-linux-arm64 /usr/local/bin/tvcast-remote
+sudo /usr/local/bin/tvcast-remote -dry-run   # press buttons, Ctrl+C to stop
+sudo cp /tmp/tvcast-remote.service /etc/systemd/system/
+sudo systemctl daemon-reload && sudo systemctl enable --now tvcast-remote
+journalctl -u tvcast-remote -f                # one line per key
+```
+
+It reconnects by itself with the stored pairing (after a reboot, the remote
+going to sleep or out of range). It doesn't need a name or address in any
+config: it uses the paired device called "Sunday". To turn it off without
+touching the photos: `sudo systemctl disable --now tvcast-remote`.
+
+## 7. In the other house
+
+1. Plug in HDMI and power. Turn the TV on **before** or together with the box.
+2. After about a minute the two QR codes show up.
+3. For the family: "scan the first one to join the TV's wifi; then the second
+   one and pick photos". The phone that joins will say "no internet": that's normal.
+4. Once photos are sent, the QR is still at hand: there's a small one with a
+   6-digit code at the bottom right, and every 12 photos the full QR screen
+   shows for a moment. Whoever opens `http://10.42.0.1` without the QR can type that code.
+
+For maintenance there: connect your computer to "Tele" and `ssh user@10.42.0.1`.
+To update tvcast: copy the new binary as in step 4 (to 10.42.0.1) and
+`sudo systemctl restart tvcast`.
+
+## Common problems
+
+| Symptom | What to check |
+|---|---|
+| The TV shows nothing | Was the TV turned on after the box? `sudo systemctl restart tvcast`. Log: `journalctl -u tvcast -n 50` |
+| The "Tele" network doesn't appear | `nmcli connection show --active`, `journalctl -u NetworkManager -n 50`. Did step 3 show `* AP`? |
+| The phone is on "Tele" but the page won't load | Android may route traffic over mobile data: turn data off for a moment or accept "stay connected" |
+| "HEIC is not supported" | Send from the phone's browser (Safari converts it) or on the iPhone: Settings → Camera → Formats → Most Compatible |
+| A video stutters | Expected with 1080p HEVC or 4K videos (see DESIGN §5) |
+| Videos without sound | `mpv --audio-device=help` to find the HDMI output and add it in `-mpv-args` (`--audio-device=alsa/...`) |
+| Wrong time on the box | Normal without internet; tvcast doesn't care |
+| The remote does nothing | `journalctl -u tvcast-remote -n 30`: "no paired device" means pair it again (6c); "retrying" lines while you press keys mean it can't connect: batteries, or take them out for 10 s |
+| TV in the wrong language | Set `TVCAST_LANG` in `/etc/tvcast.env` and `sudo systemctl restart tvcast` |

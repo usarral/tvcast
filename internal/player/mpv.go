@@ -15,17 +15,17 @@ import (
 	"github.com/usarral/tvcast/internal/store"
 )
 
-// MPV muestra fotos y vídeos a pantalla completa con mpv, controlado por su
-// socket JSON IPC. Un solo proceso para todo: no hay que cambiar de programa
-// entre foto y vídeo, y mpv usa decodificación por hardware si existe.
+// MPV shows photos and videos full screen with mpv, driven through its JSON
+// IPC socket. One process for everything: no switching programs between
+// photo and video, and mpv uses hardware decoding when available.
 type MPV struct {
-	Bin      string   // "" = no lanzar mpv, solo conectarse a Socket
-	Args     []string // argumentos extra (p. ej. --vo=drm)
+	Bin      string   // "" = don't launch mpv, just connect to Socket
+	Args     []string // extra arguments (e.g. --vo=drm)
 	Socket   string
 	Path     func(*store.Item) string
 	IdlePath func() string
 	OnEnded  func(id string)
-	// Corner devuelve el QR pequeño en BGRA para la esquina (ok=false: sin QR).
+	// Corner returns the small corner QR as BGRA (ok=false: no QR).
 	Corner func() (path string, w, h int, ok bool)
 
 	mu      sync.Mutex
@@ -35,7 +35,7 @@ type MPV struct {
 	entries map[int64]string // playlist_entry_id -> item ID
 	last    *store.Item
 	hasLast bool
-	gen     int // invalida colocaciones de overlay pendientes
+	gen     int // invalidates pending overlay placements
 }
 
 type mpvResp struct {
@@ -46,6 +46,9 @@ type mpvResp struct {
 	Reason    string          `json:"reason"`
 	EntryID   int64           `json:"playlist_entry_id"`
 }
+
+// mpvSocketWait is how long to wait at most for mpv to create its IPC socket.
+const mpvSocketWait = 30 * time.Second
 
 func (m *MPV) Start(stop <-chan struct{}) {
 	m.pending = map[int]chan mpvResp{}
@@ -66,6 +69,7 @@ func (m *MPV) Start(stop <-chan struct{}) {
 
 func (m *MPV) runOnce(stop <-chan struct{}) error {
 	var cmd *exec.Cmd
+	var exited chan struct{} // closed when the mpv process exits
 	if m.Bin != "" {
 		os.Remove(m.Socket)
 		args := append([]string{
@@ -77,32 +81,55 @@ func (m *MPV) runOnce(stop <-chan struct{}) error {
 		cmd = exec.Command(m.Bin, args...)
 		cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
 		if err := cmd.Start(); err != nil {
-			return fmt.Errorf("no se pudo lanzar mpv: %w", err)
+			return fmt.Errorf("could not start mpv: %w", err)
 		}
-		go func() { <-stop; cmd.Process.Kill() }()
+		exited = make(chan struct{})
+		go func() { cmd.Wait(); close(exited) }()
+		go func() {
+			select {
+			case <-stop:
+				cmd.Process.Kill()
+			case <-exited:
+			}
+		}()
 	}
 
+	// Cold (box booting, CPU at 100 %) mpv takes more than 5 s to open DRM
+	// and create the socket. Killing it at 5 s made the TV show the console
+	// for a few seconds on every boot. Now we wait while mpv is still alive,
+	// with a generous cap.
 	var conn net.Conn
 	var err error
-	for i := 0; i < 50; i++ {
+	deadline := time.Now().Add(mpvSocketWait)
+	for {
 		if conn, err = net.Dial("unix", m.Socket); err == nil {
 			break
+		}
+		if time.Now().After(deadline) {
+			break
+		}
+		if exited != nil {
+			select {
+			case <-exited:
+				return fmt.Errorf("mpv exited before opening the IPC socket: %w", err)
+			default:
+			}
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
 	if err != nil {
 		if cmd != nil {
 			cmd.Process.Kill()
-			cmd.Wait()
+			<-exited
 		}
-		return fmt.Errorf("sin socket IPC: %w", err)
+		return fmt.Errorf("no IPC socket after %s: %w", mpvSocketWait, err)
 	}
 	m.mu.Lock()
 	m.conn = conn
 	last, hasLast := m.last, m.hasLast
 	m.mu.Unlock()
-	log.Printf("mpv conectado en %s", m.Socket)
-	if hasLast { // reponer lo que había antes de reiniciar mpv
+	log.Printf("mpv connected on %s", m.Socket)
+	if hasLast { // restore what was shown before mpv restarted
 		go m.Show(last)
 	}
 
@@ -117,9 +144,9 @@ func (m *MPV) runOnce(stop <-chan struct{}) error {
 	m.mu.Unlock()
 	if cmd != nil {
 		cmd.Process.Kill()
-		cmd.Wait()
+		<-exited
 	}
-	return errors.New("mpv se cerró; reiniciando")
+	return errors.New("mpv closed; restarting")
 }
 
 func (m *MPV) readLoop(conn net.Conn) {
@@ -157,7 +184,7 @@ func (m *MPV) command(args ...any) (mpvResp, error) {
 	m.mu.Lock()
 	if m.conn == nil {
 		m.mu.Unlock()
-		return mpvResp{}, errors.New("mpv no conectado")
+		return mpvResp{}, errors.New("mpv not connected")
 	}
 	m.reqID++
 	id := m.reqID
@@ -172,7 +199,7 @@ func (m *MPV) command(args ...any) (mpvResp, error) {
 	select {
 	case r, ok := <-ch:
 		if !ok {
-			return mpvResp{}, errors.New("mpv desconectado")
+			return mpvResp{}, errors.New("mpv disconnected")
 		}
 		if r.Error != "success" {
 			return r, fmt.Errorf("mpv: %s", r.Error)
@@ -182,7 +209,7 @@ func (m *MPV) command(args ...any) (mpvResp, error) {
 		m.mu.Lock()
 		delete(m.pending, id)
 		m.mu.Unlock()
-		return mpvResp{}, errors.New("mpv no responde")
+		return mpvResp{}, errors.New("mpv not responding")
 	}
 }
 
@@ -192,7 +219,7 @@ func (m *MPV) Show(it *store.Item) error {
 	connected := m.conn != nil
 	m.mu.Unlock()
 	if !connected {
-		return nil // se mostrará al conectar
+		return nil // will be shown on connect
 	}
 	path, id := m.IdlePath(), ""
 	if it != nil {
@@ -207,7 +234,7 @@ func (m *MPV) Show(it *store.Item) error {
 	}
 	if json.Unmarshal(r.Data, &d) == nil && d.EntryID > 0 {
 		m.mu.Lock()
-		m.entries = map[int64]string{d.EntryID: id} // solo importa el actual
+		m.entries = map[int64]string{d.EntryID: id} // only the current one matters
 		m.mu.Unlock()
 	}
 	m.mu.Lock()
@@ -215,7 +242,7 @@ func (m *MPV) Show(it *store.Item) error {
 	gen := m.gen
 	m.mu.Unlock()
 	if it == nil || m.Corner == nil {
-		m.command("overlay-remove", overlayID) // la pantalla de QR ya lo lleva grande
+		m.command("overlay-remove", overlayID) // the QR screen already has it, large
 		return nil
 	}
 	go m.placeCorner(gen)
@@ -224,8 +251,8 @@ func (m *MPV) Show(it *store.Item) error {
 
 const overlayID = 1
 
-// placeCorner pone el QR pequeño abajo a la derecha. Espera a que mpv sepa
-// el tamaño de pantalla (osd-width) y lo escala si no es 1080p.
+// placeCorner puts the small QR at the bottom right. It waits until mpv knows
+// the screen size (osd-width) and scales it when not 1080p.
 func (m *MPV) placeCorner(gen int) {
 	path, w, h, ok := m.Corner()
 	if !ok {
@@ -254,7 +281,7 @@ func (m *MPV) placeCorner(gen int) {
 	margin := int(40 * k)
 	x, y := ow-dw-margin, oh-dh-margin
 	if dw != w || dh != h {
-		// Escalar (dw, dh) solo existe en mpv >= 0.38; si falla, sin escalar.
+		// Scaling (dw, dh) only exists in mpv >= 0.38; if it fails, no scaling.
 		if _, err := m.command("overlay-add", overlayID, x, y, path, 0, "bgra", w, h, w*4, dw, dh); err == nil {
 			return
 		}
