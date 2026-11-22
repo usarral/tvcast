@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 usarral
+
 // Package i18n holds the few user-facing strings of tvcast (phone pages, TV
 // screen, boot image, HTTP errors) in English and Spanish.
 //

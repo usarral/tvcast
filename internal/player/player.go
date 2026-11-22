@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 usarral
+
 // Package player decides what the TV shows: whatever is sent last is shown
 // right away and, when nothing new arrives, items rotate as a slideshow.
 //

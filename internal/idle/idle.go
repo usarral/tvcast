@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2026 usarral
+
 // Package idle draws the waiting screen: a 1920x1080 PNG with the QR code
 // of the web page (and, when the box runs its own wifi, the QR to join it).
 package idle

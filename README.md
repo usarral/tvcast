@@ -95,4 +95,4 @@ Example for a remote or script on the box itself:
 
 ## License
 
-[MIT](LICENSE).
+[GNU AGPL-3.0-only](LICENSE), copyright 2026 usarral. You can use, study, modify and share it, but any derivative work, including one offered to users over a network, must be published under the same license.

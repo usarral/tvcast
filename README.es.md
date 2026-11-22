@@ -93,4 +93,4 @@ Ejemplo para un mando o script en la propia caja:
 
 ## Licencia
 
-[MIT](LICENSE).
+[GNU AGPL-3.0-only](LICENSE), copyright 2026 usarral. Puedes usarlo, estudiarlo, modificarlo y compartirlo, pero toda obra derivada, incluso la que se ofrezca a usuarios por red, debe publicarse con la misma licencia.
