@@ -1,4 +1,4 @@
-// Package web sirve la página del móvil, la API y el visor web /tv.
+// Package web serves the phone page, the API and the /tv web viewer.
 package web
 
 import (
@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html/template"
 	"io"
 	"log"
 	"mime/multipart"
@@ -16,6 +17,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/usarral/tvcast/internal/i18n"
 	"github.com/usarral/tvcast/internal/player"
 	"github.com/usarral/tvcast/internal/store"
 )
@@ -23,16 +25,23 @@ import (
 //go:embed static
 var static embed.FS
 
+// The pages are html/template files: {{index .S "key"}} in HTML and the whole
+// catalog as a JS object ({{.S}}) inside <script>, escaped by the template.
+var pages = template.Must(template.ParseFS(static, "static/*.html"))
+
 const cookieName = "tvcast"
 
 type Server struct {
 	Store     *store.Store
 	Player    *player.Player
-	Token     string // vacío = sin token (solo desarrollo)
+	Token     string // empty = no token (development only)
 	IdlePath  func() string
 	CornerPNG func() string
-	PIN       string // código corto alternativo al QR (vacío = desactivado)
+	PIN       string // short code as an alternative to the QR (empty = disabled)
 	MaxUpload int64
+	// Lang is the default language of the phone pages and errors; the
+	// phone's own language (Accept-Language) wins when it is supported.
+	Lang i18n.Lang
 
 	hub hub
 
@@ -59,7 +68,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /media/{id}", s.auth(s.media(false)))
 	mux.HandleFunc("GET /thumb/{id}", s.auth(s.media(true)))
 	mux.HandleFunc("POST /api/login", s.login)
-	// Atajos de teclado de la caja (triggerhappy -> curl a 127.0.0.1).
+	// Keyboard shortcuts on the box (triggerhappy -> curl to 127.0.0.1).
 	mux.HandleFunc("POST /api/tv/qr", s.local(s.holdQR))
 	mux.HandleFunc("GET /corner.png", s.auth(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
@@ -72,7 +81,7 @@ func (s *Server) Handler() http.Handler {
 	return secHeaders(mux)
 }
 
-// Notify reparte estado y lista a móviles y visores web conectados.
+// Notify sends the state and list to connected phones and web viewers.
 func (s *Server) Notify() {
 	b, _ := json.Marshal(s.snapshot())
 	s.hub.broadcast(b)
@@ -87,11 +96,11 @@ func (s *Server) snapshot() snapshot {
 	return snapshot{State: s.Player.State(), Items: s.Store.List()}
 }
 
-// --- autenticación ---------------------------------------------------------
+// --- authentication ----------------------------------------------------------
 //
-// El QR de la tele lleva ?k=TOKEN. La primera visita guarda el token en una
-// cookie y redirige a "/" para que no quede en el historial. Así solo puede
-// enviar quien ve la tele, aunque la caja esté en la wifi de casa.
+// The TV's QR carries ?k=TOKEN. The first visit stores the token in a cookie
+// and redirects to "/" so it doesn't stay in the history. That way only
+// someone who can see the TV can send, even when the box is on the home wifi.
 
 func (s *Server) authorized(r *http.Request) bool {
 	if s.Token == "" || isLoopback(r) {
@@ -104,18 +113,18 @@ func (s *Server) authorized(r *http.Request) bool {
 func (s *Server) auth(h http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if !s.authorized(r) {
-			http.Error(w, "escanea el QR de la tele", http.StatusUnauthorized)
+			s.fail(w, r, http.StatusUnauthorized, "err.scan_qr")
 			return
 		}
 		h(w, r)
 	}
 }
 
-// local: solo desde la propia caja (el visor /tv corre en ella).
+// local: only from the box itself (the /tv viewer runs on it).
 func (s *Server) local(h http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if !isLoopback(r) {
-			http.Error(w, "solo desde la caja", http.StatusForbidden)
+			s.fail(w, r, http.StatusForbidden, "err.local_only")
 			return
 		}
 		h(w, r)
@@ -147,20 +156,33 @@ func (s *Server) index(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) page(name string) http.HandlerFunc {
+	name = strings.TrimPrefix(name, "static/")
 	return func(w http.ResponseWriter, r *http.Request) {
-		b, err := static.ReadFile(name)
-		if err != nil {
-			http.Error(w, "no encontrado", 404)
-			return
-		}
+		lang := s.lang(r)
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Header().Set("Cache-Control", "no-cache")
-		w.Write(b)
+		w.Header().Set("Content-Language", string(lang))
+		w.Header().Add("Vary", "Accept-Language")
+		data := struct {
+			Lang i18n.Lang
+			S    map[string]string
+		}{lang, i18n.Strings(lang)}
+		if err := pages.ExecuteTemplate(w, name, data); err != nil {
+			log.Printf("page %s: %v", name, err)
+		}
 	}
 }
 
-// login con el código corto que sale en la tele. Límite global de intentos
-// fallidos para que no se pueda probar el millón de combinaciones.
+// lang: the phone's language if supported, else the box's default.
+func (s *Server) lang(r *http.Request) i18n.Lang { return i18n.FromRequest(r, s.Lang) }
+
+// fail answers with a translated plain-text error.
+func (s *Server) fail(w http.ResponseWriter, r *http.Request, code int, key string) {
+	http.Error(w, i18n.T(s.lang(r), key), code)
+}
+
+// login with the short code shown on the TV. Global limit on failed attempts
+// so nobody can try the million combinations.
 const (
 	pinMaxFails = 10
 	pinWindow   = 10 * time.Minute
@@ -168,7 +190,7 @@ const (
 
 func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 	if s.Token == "" || s.PIN == "" {
-		http.Error(w, "no disponible", 404)
+		s.fail(w, r, 404, "err.unavailable")
 		return
 	}
 	s.pinMu.Lock()
@@ -183,7 +205,7 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 	blocked := len(s.pinFails) >= pinMaxFails
 	s.pinMu.Unlock()
 	if blocked {
-		http.Error(w, "Demasiados intentos. Espera unos minutos o escanea el QR.", http.StatusTooManyRequests)
+		s.fail(w, r, http.StatusTooManyRequests, "err.too_many")
 		return
 	}
 	pin := strings.TrimSpace(r.FormValue("pin"))
@@ -191,8 +213,8 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 		s.pinMu.Lock()
 		s.pinFails = append(s.pinFails, now)
 		s.pinMu.Unlock()
-		log.Printf("código incorrecto desde %s", r.RemoteAddr)
-		http.Error(w, "Código incorrecto", http.StatusForbidden)
+		log.Printf("wrong code from %s", r.RemoteAddr)
+		s.fail(w, r, http.StatusForbidden, "err.bad_code")
 		return
 	}
 	s.setCookie(w)
@@ -206,7 +228,7 @@ func (s *Server) setCookie(w http.ResponseWriter) {
 	})
 }
 
-// holdQR: ?v=1 fija la pantalla de QR, ?v=0 vuelve al pase, ?v=toggle alterna.
+// holdQR: ?v=1 pins the QR screen, ?v=0 goes back to the slideshow, ?v=toggle switches.
 func (s *Server) holdQR(w http.ResponseWriter, r *http.Request) {
 	switch r.URL.Query().Get("v") {
 	case "1":
@@ -229,11 +251,11 @@ func (s *Server) state(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) upload(w http.ResponseWriter, r *http.Request) {
-	// Margen para la miniatura y las cabeceras multipart.
+	// Room for the thumbnail and the multipart headers.
 	r.Body = http.MaxBytesReader(w, r.Body, s.MaxUpload+1<<20)
 	mr, err := r.MultipartReader()
 	if err != nil {
-		http.Error(w, "se esperaba multipart/form-data", 400)
+		s.fail(w, r, 400, "err.multipart")
 		return
 	}
 	var thumb []byte
@@ -244,34 +266,34 @@ func (s *Server) upload(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 		if err != nil {
-			uploadError(w, err)
+			s.uploadError(w, r, err)
 			return
 		}
 		switch part.FormName() {
 		case "thumb":
-			// La miniatura va ANTES que el fichero en el formulario.
+			// The thumbnail comes BEFORE the file in the form.
 			thumb, err = io.ReadAll(io.LimitReader(part, 512<<10))
 			if err != nil {
-				uploadError(w, err)
+				s.uploadError(w, r, err)
 				return
 			}
 		case "file":
 			it, err := s.Store.Save(part.FileName(), part, thumb)
 			thumb = nil
 			if err != nil {
-				uploadError(w, err)
+				s.uploadError(w, r, err)
 				return
 			}
-			log.Printf("subido %s %s %d bytes desde %s", it.ID, it.Mime, it.Size, r.RemoteAddr)
+			log.Printf("uploaded %s %s %d bytes from %s", it.ID, it.Mime, it.Size, r.RemoteAddr)
 			saved = append(saved, it)
 		}
 		drain(part)
 	}
 	if len(saved) == 0 {
-		http.Error(w, "no llegó ningún fichero", 400)
+		s.fail(w, r, 400, "err.no_file")
 		return
 	}
-	// "Enviar a la tele": lo último que llega se muestra ya.
+	// "Send to the TV": whatever arrives last is shown right away.
 	s.Player.Show(saved[len(saved)-1].ID)
 	s.Notify()
 	writeJSON(w, 201, saved)
@@ -279,27 +301,29 @@ func (s *Server) upload(w http.ResponseWriter, r *http.Request) {
 
 func drain(p *multipart.Part) { io.Copy(io.Discard, io.LimitReader(p, 1<<20)) }
 
-func uploadError(w http.ResponseWriter, err error) {
+func (s *Server) uploadError(w http.ResponseWriter, r *http.Request, err error) {
 	var mbe *http.MaxBytesError
 	switch {
 	case errors.As(err, &mbe), errors.Is(err, store.ErrTooLarge):
-		http.Error(w, "demasiado grande", http.StatusRequestEntityTooLarge)
-	case errors.Is(err, store.ErrHEIC), errors.Is(err, store.ErrUnsupported):
-		http.Error(w, err.Error(), http.StatusUnsupportedMediaType)
+		s.fail(w, r, http.StatusRequestEntityTooLarge, "err.too_large")
+	case errors.Is(err, store.ErrHEIC):
+		s.fail(w, r, http.StatusUnsupportedMediaType, "err.heic")
+	case errors.Is(err, store.ErrUnsupported):
+		s.fail(w, r, http.StatusUnsupportedMediaType, "err.unsupported")
 	default:
-		log.Printf("subida: %v", err)
-		http.Error(w, "error al guardar", 500)
+		log.Printf("upload: %v", err)
+		s.fail(w, r, 500, "err.save")
 	}
 }
 
 func (s *Server) del(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if !store.ValidID(id) {
-		http.Error(w, "id no válido", 400)
+		s.fail(w, r, 400, "err.bad_id")
 		return
 	}
 	if err := s.Store.Delete(id); err != nil {
-		http.Error(w, err.Error(), 404)
+		s.fail(w, r, 404, "err.not_found")
 		return
 	}
 	s.Player.Refresh()
@@ -309,7 +333,7 @@ func (s *Server) del(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) showItem(w http.ResponseWriter, r *http.Request) {
 	if !s.Player.Show(r.PathValue("id")) {
-		http.Error(w, "no existe", 404)
+		s.fail(w, r, 404, "err.not_found")
 		return
 	}
 	w.WriteHeader(204)
@@ -324,7 +348,7 @@ func (s *Server) media(thumb bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id := r.PathValue("id")
 		if !store.ValidID(id) {
-			http.Error(w, "id no válido", 400)
+			s.fail(w, r, 400, "err.bad_id")
 			return
 		}
 		it, ok := s.Store.Get(id)
@@ -338,16 +362,16 @@ func (s *Server) media(thumb bool) http.HandlerFunc {
 		}
 		w.Header().Set("Content-Type", ct)
 		w.Header().Set("Cache-Control", "private, max-age=86400, immutable")
-		http.ServeFile(w, r, p) // soporta Range (necesario para <video>)
+		http.ServeFile(w, r, p) // supports Range (needed by <video>)
 	}
 }
 
-// --- eventos (SSE) ----------------------------------------------------------
+// --- events (SSE) -------------------------------------------------------------
 
 func (s *Server) events(w http.ResponseWriter, r *http.Request) {
 	fl, ok := w.(http.Flusher)
 	if !ok {
-		http.Error(w, "sin streaming", 500)
+		s.fail(w, r, 500, "err.no_stream")
 		return
 	}
 	w.Header().Set("Content-Type", "text/event-stream")
@@ -397,12 +421,12 @@ func (h *hub) broadcast(b []byte) {
 	for ch := range h.subs {
 		select {
 		case ch <- b:
-		default: // cliente lento: se pierde este aviso, recibirá el siguiente
+		default: // slow client: it misses this update and gets the next one
 		}
 	}
 }
 
-// --- utilidades -------------------------------------------------------------
+// --- helpers ------------------------------------------------------------------
 
 func writeJSON(w http.ResponseWriter, code int, v any) {
 	w.Header().Set("Content-Type", "application/json")

@@ -1,5 +1,5 @@
-// Package idle genera la pantalla de espera: un PNG 1920x1080 con el QR de
-// la web (y, si hay zona wifi propia, el QR para unirse a la wifi).
+// Package idle draws the waiting screen: a 1920x1080 PNG with the QR code
+// of the web page (and, when the box runs its own wifi, the QR to join it).
 package idle
 
 import (
@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	qrcode "github.com/skip2/go-qrcode"
+	"github.com/usarral/tvcast/internal/i18n"
 	"golang.org/x/image/font"
 	"golang.org/x/image/font/gofont/gobold"
 	"golang.org/x/image/font/gofont/goregular"
@@ -20,11 +21,12 @@ import (
 )
 
 type Info struct {
-	URL      string // URL con el token, la que va en el QR
-	ShowURL  string // URL para leer en pantalla (sin token)
-	WifiSSID string // vacío = no mostrar QR de wifi
+	URL      string // URL with the token, the one in the QR
+	ShowURL  string // URL to read on screen (no token)
+	WifiSSID string // empty = no wifi QR
 	WifiPass string
-	PIN      string // código corto para teclear en la web si el QR no se lee
+	PIN      string // short code to type on the web page if the QR can't be scanned
+	Lang     i18n.Lang
 }
 
 const W, H = 1920, 1080
@@ -53,7 +55,7 @@ func Render(path string, in Info) error {
 		return err
 	}
 
-	const titleText = "Envía fotos a la tele"
+	titleText := i18n.T(in.Lang, "tv.title")
 	text(img, title, fg, (W-font.MeasureString(title, titleText).Ceil())/2, 170, titleText)
 
 	qrSize := 460
@@ -62,13 +64,13 @@ func Render(path string, in Info) error {
 	if in.WifiSSID != "" {
 		n = 2
 	}
-	x := (W - (n*qrSize + (n-1)*140)) / 2 // centrar el bloque de QRs
+	x := (W - (n*qrSize + (n-1)*140)) / 2 // center the QR block
 	step := 1
 	if in.WifiSSID != "" {
 		if err := drawQR(img, wifiQR(in.WifiSSID, in.WifiPass), x, y, qrSize); err != nil {
 			return err
 		}
-		text(img, body, accent, x, y+qrSize+60, fmt.Sprintf("%d. Únete a la wifi", step))
+		text(img, body, accent, x, y+qrSize+60, fmt.Sprintf(i18n.T(in.Lang, "tv.join_wifi"), step))
 		text(img, small, muted, x, y+qrSize+105, in.WifiSSID)
 		x += qrSize + 140
 		step++
@@ -76,20 +78,20 @@ func Render(path string, in Info) error {
 	if err := drawQR(img, in.URL, x, y, qrSize); err != nil {
 		return err
 	}
-	text(img, body, accent, x, y+qrSize+60, fmt.Sprintf("%d. Escanea y elige fotos", step))
+	text(img, body, accent, x, y+qrSize+60, fmt.Sprintf(i18n.T(in.Lang, "tv.scan"), step))
 	text(img, small, muted, x, y+qrSize+105, in.ShowURL)
 	if in.PIN != "" {
-		pinText := "Código: " + in.PIN
+		pinText := fmt.Sprintf(i18n.T(in.Lang, "tv.code"), in.PIN)
 		text(img, body, fg, (W-font.MeasureString(body, pinText).Ceil())/2, H-90, pinText)
 	}
 
 	return writePNG(path, img)
 }
 
-// Corner genera el QR pequeño que se ve en una esquina durante el pase:
-// un PNG (visor web) y el mismo dibujo en BGRA crudo (overlay de mpv).
-// Devuelve el tamaño en píxeles.
-func Corner(pngPath, bgraPath, url, pin string) (w, h int, err error) {
+// Corner draws the small QR shown in a corner during the slideshow: a PNG
+// (web viewer) and the same image as raw BGRA (mpv overlay). It returns the
+// size in pixels.
+func Corner(pngPath, bgraPath, url, pin string, lang i18n.Lang) (w, h int, err error) {
 	const qrSize, pad = 260, 14
 	small, err := face(goregular.TTF, 26)
 	if err != nil {
@@ -113,14 +115,14 @@ func Corner(pngPath, bgraPath, url, pin string) (w, h int, err error) {
 	center := func(f font.Face, y int, s string) {
 		text(img, f, dark, (w-font.MeasureString(f, s).Ceil())/2, y, s)
 	}
-	center(small, qrSize+pad+28, "Envía fotos a la tele")
+	center(small, qrSize+pad+28, i18n.T(lang, "corner.title"))
 	if pin != "" {
-		center(bold, qrSize+pad+68, "Código "+pin)
+		center(bold, qrSize+pad+68, fmt.Sprintf(i18n.T(lang, "corner.code"), pin))
 	}
 	if err := writePNG(pngPath, img); err != nil {
 		return 0, 0, err
 	}
-	// BGRA con alfa premultiplicado (opaco: basta con cambiar R y B).
+	// BGRA with premultiplied alpha (opaque, so swapping R and B is enough).
 	raw := make([]byte, w*h*4)
 	for i := 0; i < w*h; i++ {
 		raw[i*4+0] = img.Pix[i*4+2]
@@ -151,7 +153,7 @@ func writePNG(path string, img image.Image) error {
 	return os.Rename(tmp, path)
 }
 
-// wifiQR usa el formato estándar que entienden las cámaras de iOS y Android.
+// wifiQR uses the standard format understood by iOS and Android cameras.
 func wifiQR(ssid, pass string) string {
 	esc := strings.NewReplacer(`\`, `\\`, `;`, `\;`, `,`, `\,`, `:`, `\:`, `"`, `\"`)
 	if pass == "" {

@@ -1,9 +1,9 @@
-// splash genera la imagen de arranque de la caja en crudo (BGRX, 32 bits),
-// lista para copiarla tal cual a /dev/fb0 en cuanto arranca systemd:
+// splash draws the box's boot image as raw pixels (BGRX, 32 bits), ready to
+// be copied as is to /dev/fb0 as soon as systemd starts:
 //
-//	go run ./cmd/splash -w 2560 -h 1440 -o splash.raw
+//	go run ./cmd/splash -w 2560 -h 1440 -lang es -o splash.raw
 //
-// El tamaño debe ser el del framebuffer (/sys/class/graphics/fb0/virtual_size).
+// The size must match the framebuffer (/sys/class/graphics/fb0/virtual_size).
 package main
 
 import (
@@ -14,6 +14,8 @@ import (
 	"log"
 	"os"
 
+	"github.com/usarral/tvcast/internal/i18n"
+
 	"golang.org/x/image/font"
 	"golang.org/x/image/font/gofont/gobold"
 	"golang.org/x/image/font/gofont/goregular"
@@ -22,17 +24,22 @@ import (
 )
 
 var (
-	bg     = color.RGBA{0x14, 0x17, 0x1c, 0xff} // mismos colores que la pantalla del QR
+	bg     = color.RGBA{0x14, 0x17, 0x1c, 0xff} // same colors as the QR screen
 	fg     = color.RGBA{0xf2, 0xf2, 0xf2, 0xff}
 	muted  = color.RGBA{0xa0, 0xa6, 0xb0, 0xff}
 	accent = color.RGBA{0xff, 0xb3, 0x47, 0xff}
 )
 
 func main() {
-	w := flag.Int("w", 2560, "ancho del framebuffer")
-	h := flag.Int("h", 1440, "alto del framebuffer")
-	out := flag.String("o", "splash.raw", "fichero de salida (BGRX crudo)")
+	w := flag.Int("w", 2560, "framebuffer width")
+	h := flag.Int("h", 1440, "framebuffer height")
+	out := flag.String("o", "splash.raw", "output file (raw BGRX)")
+	langFlag := flag.String("lang", string(i18n.Default), "text language: en | es")
 	flag.Parse()
+	lang, ok := i18n.Parse(*langFlag)
+	if !ok {
+		log.Fatalf("unknown language %q (supported: %v)", *langFlag, i18n.Supported)
+	}
 
 	img := image.NewRGBA(image.Rect(0, 0, *w, *h))
 	draw.Draw(img, img.Bounds(), &image.Uniform{bg}, image.Point{}, draw.Src)
@@ -48,10 +55,10 @@ func main() {
 	bw := int(220 * scale)
 	draw.Draw(img, image.Rect(*w/2-bw/2, cy+int(40*scale), *w/2+bw/2, cy+int(40*scale)+bar),
 		&image.Uniform{accent}, image.Point{}, draw.Src)
-	centered(img, body, muted, cy+int(140*scale), "Encendiendo… un momento")
+	centered(img, body, muted, cy+int(140*scale), i18n.T(lang, "splash.booting"))
 	centered(img, small, muted, *h-int(70*scale), "by Usarral")
 
-	// RGBA -> BGRX (XRGB8888 little endian), que es lo que espera rockchipdrmfb.
+	// RGBA -> BGRX (XRGB8888 little endian), which is what rockchipdrmfb expects.
 	p := img.Pix
 	for i := 0; i < len(p); i += 4 {
 		p[i], p[i+2], p[i+3] = p[i+2], p[i], 0
