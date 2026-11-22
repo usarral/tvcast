@@ -182,6 +182,10 @@ Tested on a desktop Linux (BlueZ 5.x, CSR USB adapter `0a12:0001`) with
   switched off and on. On the first connection `StartNotify` on `f000b001`
   can fail with ATT error 0x0e (likely the link isn't encrypted yet); it's
   only logged, it doesn't repeat after reconnecting, and Mic still arrives.
+  All 11 keys confirmed. Batteries out and in: back ~2 s after BlueZ notices
+  the drop. After reconnecting, ~10 "mic" events arrive before the first real
+  key (the remote's start-up noise?). Harmless while Mic is unmapped; **if Mic
+  ever gets an action, ignore it for the first seconds after connecting.**
 - **No console or restart from the remote.** Power stays unmapped: one
   accidental press would leave a family member's TV on a login prompt.
 

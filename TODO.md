@@ -11,8 +11,9 @@
   Linux with a USB adapter (docs/LESSONS.md) and `tvcast-remote` written:
   Right/Left photo, OK and Play/Pause pause, Home QR, Back slideshow.
   Next:
-  - [ ] Run `tvcast-remote -dry-run` on the desktop with the paired remote,
-        then against a local tvcast.
+  - [x] Run `tvcast-remote -dry-run` on the desktop with the paired remote:
+        all keys, reconnects alone in ~2 s.
+  - [ ] Against a local tvcast with `/tv` open.
   - [ ] On the box, with an automatic revert planned: keep the internal
         BCM4334 Bluetooth off (`hci_uart` blacklisted), plug in the USB
         adapter, pair, install the service (docs/INSTALL.md, 6c).
