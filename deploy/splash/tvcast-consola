@@ -1,0 +1,6 @@
+#!/bin/sh
+# Ctrl+Alt+C: para tvcast y enseña el login local. El login vive en tty2
+# (tty1 queda limpio para la imagen de arranque), así que hay que cambiar.
+systemctl stop tvcast
+setterm --cursor on >/dev/tty2 2>/dev/null
+chvt 2

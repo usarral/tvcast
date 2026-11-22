@@ -41,6 +41,21 @@ Notas de lo que funcionó y lo que no en el hardware real, para no repetirlo.
 - Sin pila de reloj, `journalctl --list-boots` y las horas del log mienten
   hasta que llega NTP: usar `-o short-monotonic` para ordenar el arranque.
 
+## Arranque sin consola
+
+- Plymouth no compensa en esta caja: hay que meterlo en el initramfs y al
+  terminar deja un hueco (negro o el login) hasta que mpv pinta, que en frío
+  tarda unos 8 s. Más simple: `console=serial` en `armbianEnv.txt` (el kernel
+  y systemd escriben solo al puerto serie), `vt.global_cursor_default=0
+  logo.nologo`, y una imagen en crudo copiada a `/dev/fb0` en cuanto arranca
+  systemd. Detalles en `deploy/splash/README.md`.
+- El framebuffer de consola va a 2560x1440 (modo preferido de la tele), no a
+  1920x1080 como mpv: la imagen tiene que medir lo que diga
+  `/sys/class/graphics/fb0/virtual_size`, en BGRX.
+- El login en tty1 pintaría encima de la imagen: se mueve a tty2 y Ctrl+Alt+C
+  hace `chvt 2`. Lo de U-Boot (primeros segundos) no se puede tapar sin
+  recompilarlo.
+
 ## Sobre "nadie lo ha hecho"
 
 No he encontrado documentación previa de reutilizar la Sunday Box con
