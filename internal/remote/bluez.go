@@ -38,6 +38,9 @@ type BlueZ struct {
 	// ConnectTimeout bounds one Device1.Connect call.
 	ConnectTimeout time.Duration
 	Log            *log.Logger
+	// OnState, if set, is told when the remote connects (with its battery
+	// percentage, -1 if unknown) and when the link drops.
+	OnState func(connected bool, battery int)
 }
 
 type objects = map[dbus.ObjectPath]map[string]map[string]dbus.Variant
@@ -110,7 +113,17 @@ func (b *BlueZ) Listen(ctx context.Context, emit func(Notification)) error {
 			b.Conn.Object("org.bluez", path).Call(ifChar+".StopNotify", 0)
 		}
 	}()
-	b.Log.Printf("remote: connected (%s), listening on %d characteristics", dev, len(chars))
+	bat := -1
+	if v, err := devObj.GetProperty("org.bluez.Battery1.Percentage"); err == nil {
+		if p, ok := v.Value().(byte); ok {
+			bat = int(p)
+		}
+	}
+	b.Log.Printf("remote: connected (%s), listening on %d characteristics, battery %d%%", dev, len(chars), bat)
+	if b.OnState != nil {
+		b.OnState(true, bat)
+		defer b.OnState(false, -1)
+	}
 
 	for {
 		select {

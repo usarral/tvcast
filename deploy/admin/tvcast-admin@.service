@@ -1,0 +1,8 @@
+# One admin panel action, run as root: tvcast-admin@reboot.service and so on.
+# tvcast starts these with `systemctl start` (allowed by 50-tvcast-admin.rules).
+[Unit]
+Description=tvcast admin action: %i
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/tvcast-admin %i

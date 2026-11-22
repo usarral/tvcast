@@ -9,14 +9,23 @@
   html, body { margin:0; height:100%; background:#000; overflow:hidden; cursor:none; }
   #stage > * { position:absolute; inset:0; width:100%; height:100%; object-fit:contain; }
   #corner { position:absolute; right:2vw; bottom:3.7vh; height:30vh; display:none; z-index:2; }
+  #admin { position:absolute; inset:0; width:100%; height:100%; object-fit:contain; background:#000; display:none; z-index:3; }
 </style>
 </head>
 <body>
 <div id="stage"></div>
 <img id="corner" alt="">
+<img id="admin" alt="">
 <script>
-let shown = null;
+let shown = null, adminRev = 0;
+function showAdmin(rev) {
+  if (rev === adminRev) return;
+  adminRev = rev;
+  const a = document.getElementById('admin');
+  if (rev) { a.src = '/api/tv/admin.png?' + rev; a.style.display = 'block'; } else { a.style.display = 'none'; }
+}
 function show(snap) {
+  showAdmin(snap.admin || 0);
   const id = snap.state.currentId || '';
   if (id === shown) return;
   shown = id;

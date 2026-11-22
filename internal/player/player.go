@@ -178,6 +178,8 @@ func (p *Player) HoldQR(v bool) {
 
 func (p *Player) Held() bool { p.mu.Lock(); defer p.mu.Unlock(); return p.held }
 
+func (p *Player) Paused() bool { p.mu.Lock(); defer p.mu.Unlock(); return p.paused }
+
 // Ended is called by a display when a video finishes.
 func (p *Player) Ended(id string) {
 	p.mu.Lock()

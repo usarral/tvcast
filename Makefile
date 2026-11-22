@@ -2,13 +2,15 @@
 BIN := bin
 PKG := ./cmd/tvcast
 BOX ?= tvbox
+VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
+LDFLAGS := -s -w -X main.version=$(VERSION)
 
 .PHONY: build arm64 test run deploy clean
 build:
-	go build -o $(BIN)/tvcast $(PKG)
+	go build -ldflags="-X main.version=$(VERSION)" -o $(BIN)/tvcast $(PKG)
 
 arm64:
-	GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o $(BIN)/tvcast-linux-arm64 $(PKG)
+	GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -trimpath -ldflags="$(LDFLAGS)" -o $(BIN)/tvcast-linux-arm64 $(PKG)
 	GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o $(BIN)/tvcast-remote-linux-arm64 ./cmd/tvcast-remote
 	GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o $(BIN)/tvcast-splash-linux-arm64 ./cmd/splash
 

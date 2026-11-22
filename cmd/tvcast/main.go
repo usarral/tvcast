@@ -20,12 +20,16 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/usarral/tvcast/internal/admin"
 	"github.com/usarral/tvcast/internal/i18n"
 	"github.com/usarral/tvcast/internal/idle"
 	"github.com/usarral/tvcast/internal/player"
 	"github.com/usarral/tvcast/internal/store"
 	"github.com/usarral/tvcast/internal/web"
 )
+
+// version is set at build time (Makefile: -ldflags "-X main.version=...").
+var version = "dev"
 
 func main() {
 	var (
@@ -125,6 +129,18 @@ func main() {
 	}
 	pl.OnChange(func(player.State) { srv.Notify() })
 
+	adm := &admin.Controller{
+		Box: &box{pl: pl, st: st}, Sys: admin.Systemd{}, Lang: lang, OnChange: srv.Notify,
+		Status: func(r admin.Remote) []string {
+			return admin.StatusLines(admin.Info{
+				Version: version, IP: detectIP(*iface), Network: admin.NetworkLabel(*iface, lang),
+				Photos: len(st.List()), FreeBytes: admin.FreeBytes(*dataDir), Uptime: admin.Uptime(),
+				Remote: r, Now: time.Now(),
+			}, lang)
+		},
+	}
+	srv.Admin = adm
+
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 	stop := ctx.Done()
@@ -134,7 +150,7 @@ func main() {
 		m := &player.MPV{
 			Bin: *mpvBin, Args: strings.Fields(*mpvArgs), Socket: *mpvSock,
 			Path: func(it *store.Item) string { return st.Path(it) }, IdlePath: func() string { return idlePath },
-			OnEnded: pl.Ended,
+			OnEnded: pl.Ended, PanelDir: filepath.Dir(*mpvSock),
 		}
 		if *corner {
 			m.Corner = func() (string, int, int, bool) {
@@ -145,6 +161,7 @@ func main() {
 		}
 		m.Start(stop)
 		pl.AddDisplay(m)
+		adm.Screen = m
 	case "web":
 		// Only the /tv viewer (Chromium kiosk, or a browser for testing).
 	default:
@@ -173,7 +190,7 @@ func main() {
 		defer c()
 		hs.Shutdown(sctx)
 	}()
-	log.Printf("listening on %s, data in %s, display %s, language %s", *addr, *dataDir, *display, lang)
+	log.Printf("tvcast %s listening on %s, data in %s, display %s, language %s", version, *addr, *dataDir, *display, lang)
 	if err := hs.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		log.Fatal(err)
 	}
@@ -252,4 +269,35 @@ func detectIP(prefer string) string {
 		return fallback
 	}
 	return "127.0.0.1"
+}
+
+// box adapts the player and the store to what the admin panel needs.
+type box struct {
+	pl *player.Player
+	st *store.Store
+}
+
+func (b *box) Next()            { b.pl.Next() }
+func (b *box) Prev()            { b.pl.Prev() }
+func (b *box) TogglePause()     { b.pl.TogglePause() }
+func (b *box) SetPaused(v bool) { b.pl.SetPaused(v) }
+func (b *box) Paused() bool     { return b.pl.Paused() }
+func (b *box) HoldQR(v bool)    { b.pl.HoldQR(v) }
+func (b *box) Held() bool       { return b.pl.Held() }
+
+// DeleteAll removes every photo and video (admin panel, with confirmation).
+func (b *box) DeleteAll() (int, error) {
+	n := 0
+	var firstErr error
+	for _, it := range b.st.List() {
+		if err := b.st.Delete(it.ID); err != nil {
+			if firstErr == nil {
+				firstErr = err
+			}
+			continue
+		}
+		n++
+	}
+	b.pl.Refresh()
+	return n, firstErr
 }

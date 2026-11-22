@@ -86,7 +86,9 @@ Error messages are plain text in the phone's language (`Accept-Language`).
 | POST | `/api/show/{id}` · `/api/next` · `/api/prev` | what is on screen |
 | POST | `/api/pause?v=1\|0\|toggle` | pause, resume or flip (remote: OK, Play/Pause) |
 | DELETE | `/api/items/{id}` | delete |
-| POST | `/api/tv/qr?v=1\|0\|toggle` | box only: pin or release the QR screen (shortcuts Ctrl+Alt+Q / Ctrl+Alt+S) |
+| POST | `/api/tv/qr?v=1\|0\|toggle` | box only: pin or release the QR screen |
+| POST | `/api/tv/key?k=up\|down\|left\|right\|ok\|back\|home\|playpause\|heart\|…\|admin` | box only: one key from the keyboard or the remote (everyday actions, the admin panel and its secret sequence) |
+| POST | `/api/tv/remote?connected=1&battery=80` | box only: tvcast-remote reports the remote's state |
 
 Example for a remote or script on the box itself:
 `curl -X POST localhost:8080/api/next`.

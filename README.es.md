@@ -84,7 +84,9 @@ abriendo la URL del QR (`/?k=<token>`) o con el código de 6 cifras de la tele
 | POST | `/api/show/{id}` · `/api/next` · `/api/prev` | qué se ve |
 | POST | `/api/pause?v=1\|0\|toggle` | pausar, seguir o alternar (mando: OK, Play/Pausa) |
 | DELETE | `/api/items/{id}` | borrar |
-| POST | `/api/tv/qr?v=1\|0\|toggle` | solo desde la caja: fijar o soltar la pantalla de QR (atajos Ctrl+Alt+Q / Ctrl+Alt+S) |
+| POST | `/api/tv/qr?v=1\|0\|toggle` | solo desde la caja: fijar o soltar la pantalla de QR |
+| POST | `/api/tv/key?k=up\|down\|left\|right\|ok\|back\|home\|playpause\|heart\|…\|admin` | solo desde la caja: una tecla del teclado o del mando (acciones de siempre, panel de administración y su secuencia) |
+| POST | `/api/tv/remote?connected=1&battery=80` | solo desde la caja: tvcast-remote informa del estado del mando |
 
 Ejemplo para un mando o script en la propia caja:
 `curl -X POST localhost:8080/api/next`.

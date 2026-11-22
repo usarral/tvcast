@@ -159,25 +159,58 @@ sudo nmcli connection modify "YOUR_WIFI" connection.autoconnect yes
 sudo nmcli connection down tvcast-ap     # it rejoins your wifi by itself
 ```
 
-## 6b. Keyboard shortcuts (optional)
+## 6b. Admin panel and keyboard
 
-With a USB keyboard or 2.4 GHz dongle plugged into the box:
+Everything you may need on the box is in a hidden panel on the TV:
 
-| Shortcut | What it does |
+- **Keyboard** (USB or 2.4 GHz dongle): **Ctrl+Alt+A**.
+- **Remote** (6c): **Heart, Up, Heart, Down** within 5 seconds.
+
+Move with the arrows, **OK** (Enter) to choose, **Back** (Esc) to go back,
+**Home** to close. It closes by itself after 2 minutes without keys. While
+it is open the slideshow is paused.
+
+| Item | What it does |
 |---|---|
-| **Ctrl+Alt+Q** | Shows the QR full screen and pins it, even if there are photos or new ones arrive (they are still saved) |
-| **Ctrl+Alt+S** | Back to the slideshow |
-| **Ctrl+Alt+C** | Stops tvcast and shows the local login (see `deploy/splash`) |
-| **Ctrl+Alt+T** | Starts or restarts tvcast |
+| Status (right) | IP and network (home wifi or "Tele"), photos, free space, uptime, remote and its battery, version |
+| Show / hide the QR | Pins the QR full screen (you'll see it when you close the panel) |
+| Pause / resume | What the slideshow does when you close the panel |
+| Network | Home wifi or "Tele" (runs the box's `casa` / `tele`, with their automatic revert), wifi log |
+| Logs | tvcast, wifi, remote and Bluetooth, admin actions, kernel |
+| Photos | Delete all photos |
+| New phone code and QR | Every phone has to scan again |
+| Pair the remote again | Forgets the old pairing and pairs the remote nearby |
+| Language | Español / English (TV screen and boot image) |
+| System | Restart tvcast, reboot, power off, open the console (login on tty2) |
+
+Everything that changes the box asks for confirmation (No / Yes, on No by
+default). Without a panel, the keyboard's arrows change photo, Enter pauses
+and Esc goes back to the slideshow, like the remote.
+
+### Install
+
+tvcast runs without privileges. The actions that need root go through
+systemd: tvcast starts `tvcast-admin@<action>.service`, and a polkit rule lets
+the `tvcast` user start those units and nothing else (no sudo).
 
 ```sh
-sudo apt install -y triggerhappy        # if you didn't in step 1
-sudo cp /tmp/tvcast.conf /etc/triggerhappy/triggers.d/   # copied from deploy/triggerhappy/
-sudo systemctl restart triggerhappy
+sudo apt install -y triggerhappy polkitd   # if missing (needs internet: do it at home)
+# from deploy/admin, deploy/systemd and deploy/triggerhappy, copied to /tmp:
+sudo install -m755 /tmp/tvcast-admin /usr/local/sbin/
+sudo install -m644 /tmp/tvcast-admin@.service /etc/systemd/system/
+sudo install -m644 /tmp/50-tvcast-admin.rules /etc/polkit-1/rules.d/
+sudo install -m644 /tmp/tvcast.service /etc/systemd/system/   # now reads the journal (logs in the panel)
+sudo cp /tmp/tvcast.conf /etc/triggerhappy/triggers.d/
+sudo systemctl daemon-reload && sudo systemctl restart tvcast triggerhappy
+# Check the rule: this must work as the tvcast user, and stop must not.
+sudo -u tvcast systemctl start tvcast-admin@restart-tvcast.service
 ```
 
-Without a keyboard, the same over SSH: `curl -X POST 'http://127.0.0.1/api/tv/qr?v=1'`
-(and `v=0` to go back). It only works from the box itself.
+The network items call the box's own `casa` and `tele` commands (not in the
+repo yet): if they aren't there, the panel says so in the log.
+
+The old shortcuts (Ctrl+Alt+Q/S/C/T) and `curl -X POST
+'http://127.0.0.1/api/tv/qr?v=1'` still work.
 
 ## 6c. Official Sunday remote (optional)
 
@@ -191,10 +224,12 @@ BlueZ and calls tvcast's local API.
 | **OK** or **Play/Pause** | Pause or resume the slideshow |
 | **Home** | Show the QR full screen and pin it; press again to go back |
 | **Back** | Back to the slideshow (drops the pinned QR and resumes) |
-| Up, Down, Heart, Vol+/−, Mic, Power | Nothing yet (they show up in the log) |
+| **Heart, Up, Heart, Down** | Opens the admin panel (6b); inside it, the arrows, OK, Back and Home drive the menu |
+| Vol+/−, Mic, Power | Nothing yet (they show up in the log) |
 
-The remote never opens the console or restarts tvcast: that stays on the
-keyboard shortcuts (6b), so a family member can't leave the TV on a login.
+Power does nothing on purpose, and the console and restarts are only in the
+admin panel, behind the sequence and a confirmation, so a family member can't
+leave the TV on a login by accident.
 
 **The internal Bluetooth is a risk.** There is no USB adapter in this box, so
 the remote uses the internal chip (BCM4334: same chip, radio and antenna as

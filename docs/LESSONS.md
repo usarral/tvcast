@@ -220,6 +220,32 @@ Tested on a desktop Linux (BlueZ 5.x, CSR USB adapter `0a12:0001`) with
   settings (`btc_*`) in the wifi nvram, comparing with the Android backup.
   Plan B stays a €5 USB adapter.
 
+## Admin panel (November 2026)
+
+- Loose shortcuts and SSH commands became one hidden panel on the TV:
+  Ctrl+Alt+A on a keyboard, **Heart, Up, Heart, Down** on the remote.
+  Heart, Up and Down do nothing on their own, so the sequence doesn't happen
+  by accident; Mic is useless for it (the remote sends Mic noise when it
+  reconnects) and holding a key isn't reported as such.
+- **All keys go to tvcast** (`/api/tv/key`), from triggerhappy and from
+  tvcast-remote alike. tvcast decides what a key means (everyday action,
+  sequence, menu), so the keyboard and the remote can't drift apart and the
+  remote service stays a dumb forwarder.
+- **Drawn as an mpv overlay**, not a new "screen" in the player: the panel
+  is a 1920x1080 BGRA image on overlay 63, above the corner QR, written to
+  tmpfs in two alternating files. The slideshow state is untouched (only
+  paused) and closing just removes the overlay. The /tv web viewer gets the
+  same image as a PNG, which makes it testable on a computer.
+- **Root without sudo**: tvcast.service has `NoNewPrivileges=yes`, which
+  rules out sudo. Instead tvcast asks systemd (D-Bus) to start
+  `tvcast-admin@<verb>.service`, and a polkit rule allows exactly that for
+  the tvcast user. The verbs are a fixed list checked in Go and in the script.
+- **A deadlock caught by a local run, not by the unit tests**: opening the
+  panel pauses the player, whose change callback asks the panel for its
+  revision while the panel holds its lock. The revision is now an atomic.
+- Confirmations default to "No" and need a move to "Yes": two quick OKs can't
+  reboot the box. The panel closes by itself after 2 minutes.
+
 ## English as the main language (November 2026)
 
 - The repo went from Spanish to English (docs, comments, logs, flags) to make

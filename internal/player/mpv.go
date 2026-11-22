@@ -5,10 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"image"
 	"log"
 	"net"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -27,6 +29,8 @@ type MPV struct {
 	OnEnded  func(id string)
 	// Corner returns the small corner QR as BGRA (ok=false: no QR).
 	Corner func() (path string, w, h int, ok bool)
+	// PanelDir is where the admin panel image is written (tmpfs).
+	PanelDir string
 
 	mu      sync.Mutex
 	conn    net.Conn
@@ -36,6 +40,7 @@ type MPV struct {
 	last    *store.Item
 	hasLast bool
 	gen     int // invalidates pending overlay placements
+	panelN  int // alternates the admin panel file
 }
 
 type mpvResp struct {
@@ -302,4 +307,45 @@ func (m *MPV) intProp(name string) int {
 		return 0
 	}
 	return int(v)
+}
+
+// panelOverlayID is above the corner QR (mpv draws overlays in ID order).
+const panelOverlayID = 63
+
+// ShowPanel draws the admin panel full screen on top of whatever mpv shows.
+// The image is written as raw BGRA to PanelDir (tmpfs: /run/tvcast), to two
+// alternating files so mpv never reads one that is being rewritten.
+func (m *MPV) ShowPanel(img *image.RGBA) error {
+	w, h := img.Bounds().Dx(), img.Bounds().Dy()
+	raw := make([]byte, w*h*4)
+	for i := 0; i < w*h; i++ {
+		raw[i*4+0] = img.Pix[i*4+2]
+		raw[i*4+1] = img.Pix[i*4+1]
+		raw[i*4+2] = img.Pix[i*4+0]
+		raw[i*4+3] = 0xff
+	}
+	m.mu.Lock()
+	m.panelN ^= 1
+	path := filepath.Join(m.PanelDir, fmt.Sprintf("tvcast-panel-%d.bgra", m.panelN))
+	m.mu.Unlock()
+	if err := os.WriteFile(path, raw, 0o600); err != nil {
+		return err
+	}
+	ow, oh := m.intProp("osd-width"), m.intProp("osd-height")
+	if ow > 0 && oh > 0 && (ow != w || oh != h) {
+		if _, err := m.command("overlay-add", panelOverlayID, 0, 0, path, 0, "bgra", w, h, w*4, ow, oh); err == nil {
+			return nil
+		}
+	}
+	_, err := m.command("overlay-add", panelOverlayID, 0, 0, path, 0, "bgra", w, h, w*4)
+	return err
+}
+
+// HidePanel removes the admin panel.
+func (m *MPV) HidePanel() error {
+	_, err := m.command("overlay-remove", panelOverlayID)
+	for i := 0; i < 2; i++ {
+		os.Remove(filepath.Join(m.PanelDir, fmt.Sprintf("tvcast-panel-%d.bgra", i)))
+	}
+	return err
 }
