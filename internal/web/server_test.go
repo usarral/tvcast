@@ -131,3 +131,15 @@ func TestKeyEndpoint(t *testing.T) {
 		t.Fatal("Home should close the panel")
 	}
 }
+
+// A local `const t = ...` inside the page's render loop once shadowed the
+// translation function t() and made the photo grid come out empty.
+func TestIndexDoesNotShadowTranslate(t *testing.T) {
+	b, err := static.ReadFile("static/index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := strings.Count(string(b), "const t = "); n != 1 {
+		t.Fatalf("index.html declares const t %d times, want 1 (the translate function)", n)
+	}
+}

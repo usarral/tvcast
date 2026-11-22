@@ -120,22 +120,22 @@ function render() {
   $('pause').textContent = snap.state.paused ? t('page.resume') : t('page.pause');
   const g = $('grid'); g.replaceChildren();
   for (const it of [...snap.items].reverse()) {
-    const t = document.createElement('div');
-    t.className = 'tile' + (it.id === snap.state.currentId ? ' on' : '');
+    const tile = document.createElement('div');
+    tile.className = 'tile' + (it.id === snap.state.currentId ? ' on' : '');
     if (it.hasThumb || it.kind === 'image') {
       const img = document.createElement('img');
       img.loading = 'lazy'; img.alt = it.name;
       img.src = it.hasThumb ? `/thumb/${it.id}` : `/media/${it.id}`;
-      t.append(img);
+      tile.append(img);
     } else {
-      const v = document.createElement('div'); v.className = 'vid'; v.textContent = '🎬'; t.append(v);
+      const v = document.createElement('div'); v.className = 'vid'; v.textContent = '🎬'; tile.append(v);
     }
-    t.onclick = () => post(`/api/show/${it.id}`);
+    tile.onclick = () => post(`/api/show/${it.id}`);
     const d = document.createElement('button');
     d.className = 'del'; d.textContent = '✕'; d.setAttribute('aria-label', t('page.delete'));
     d.onclick = ev => { ev.stopPropagation(); if (confirm(t('page.confirm_del'))) post(`/api/items/${it.id}`, 'DELETE'); };
-    t.append(d);
-    g.append(t);
+    tile.append(d);
+    g.append(tile);
   }
 }
 
