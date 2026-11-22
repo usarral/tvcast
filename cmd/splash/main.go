@@ -40,6 +40,7 @@ func main() {
 	scale := float64(*h) / 1080
 	title := face(gobold.TTF, 110*scale)
 	body := face(goregular.TTF, 44*scale)
+	small := face(goregular.TTF, 30*scale)
 
 	cy := *h / 2
 	centered(img, title, fg, cy, "tvcast")
@@ -48,6 +49,7 @@ func main() {
 	draw.Draw(img, image.Rect(*w/2-bw/2, cy+int(40*scale), *w/2+bw/2, cy+int(40*scale)+bar),
 		&image.Uniform{accent}, image.Point{}, draw.Src)
 	centered(img, body, muted, cy+int(140*scale), "Encendiendo… un momento")
+	centered(img, small, muted, *h-int(70*scale), "by Usarral")
 
 	// RGBA -> BGRX (XRGB8888 little endian), que es lo que espera rockchipdrmfb.
 	p := img.Pix
