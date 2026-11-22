@@ -248,7 +248,8 @@ Desde el repo, en el ordenador (antes `make arm64`):
 ```sh
 scp bin/tvcast-linux-arm64 bin/tvcast-remote-linux-arm64 deploy/systemd/tvcast-remote.service \
     deploy/bluetooth/tvcast-bt-guard deploy/bluetooth/tvcast-bt-guard.service \
-    deploy/bluetooth/watchdog.conf tvbox:/tmp/
+    deploy/bluetooth/watchdog.conf deploy/network/tvcast-netwd \
+    deploy/network/tvcast-netwd.service deploy/network/tvcast-netwd.timer tvbox:/tmp/
 ```
 
 El binario actual sale en inglés por defecto: antes de instalarlo en una caja
@@ -276,6 +277,27 @@ ls /var/log/journal                     # registro persistente (para leer un cue
 
 Los ficheros están en `deploy/bluetooth/`. Para deshacer: bórralos y reinicia.
 
+### Watchdog de red
+
+Con el Bluetooth interno encendido y fotos subiendo, la caja perdió la wifi
+con Linux todavía vivo. El watchdog de hardware solo salta si el kernel se
+congela, así que no hizo nada y la caja se quedó inaccesible. `tvcast-netwd`
+comprueba la wifi cada 30 s (modo AP: interfaz en modo AP y con IP; conectada
+a una wifi: IP y el router responde al ping) y reinicia tras 2 minutos sin
+ella. Espera 5 minutos tras arrancar y se rinde tras 2 reinicios seguidos sin
+recuperar la red (no tiene sentido reiniciar en bucle si el router está apagado).
+
+```sh
+# desde deploy/network, copiados a /tmp:
+sudo install -m755 /tmp/tvcast-netwd /usr/local/sbin/
+sudo cp /tmp/tvcast-netwd.service /tmp/tvcast-netwd.timer /etc/systemd/system/
+sudo systemctl daemon-reload && sudo systemctl enable --now tvcast-netwd.timer
+journalctl -u tvcast-netwd -f        # en silencio mientras la red va bien
+```
+
+Para apagarlo: `sudo systemctl disable --now tvcast-netwd.timer`, o
+`TVCAST_NETWD_DISABLE=1` en `/etc/tvcast.env`.
+
 ### 3. Mira el chip antes de usarlo
 
 ```sh
@@ -297,13 +319,27 @@ sudo dmesg | grep -iE 'bluetooth|hci|bcm'
 Solo habla con un equipo a la vez: primero quítalo del ordenador con el que
 está emparejado (`bluetoothctl remove <dirección>` allí, o apaga su Bluetooth).
 
+Emparejar necesita un agente **en la misma sesión de bluetoothctl**: un
+`bluetoothctl pair <dirección>` suelto falla con `Authentication Failed (0x05)`.
+
 ```sh
 sudo systemctl enable --now bluetooth
-bluetoothctl            # y dentro: scan on, espera a "Sunday",
-                        #           pair <dirección>, trust <dirección>, scan off, quit
+bluetoothctl            # y dentro, todo en esta misma sesión:
+#   agent NoInputNoOutput
+#   default-agent
+#   scan on             (espera a "Sunday")
+#   pair <dirección>
+#   trust <dirección>
+#   scan off
+#   quit
 ```
 
-Sin PIN. Si no aparece, quítale las pilas 10 s.
+Sin PIN. Si no aparece, quítale las pilas 10 s. Más adelante, "Emparejar el
+mando otra vez" del panel de administración hace lo mismo.
+
+Si `bluetoothctl list` no muestra ningún controlador, el chip interno no ha
+arrancado (`dmesg`: `Failed to set baudrate`, error -110). Recargar el driver
+lo arregla: `sudo modprobe -r hci_uart btbcm && sudo modprobe hci_uart`.
 
 ### 5. Instala tvcast-remote
 

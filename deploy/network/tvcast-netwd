@@ -1,0 +1,68 @@
+#!/bin/sh
+# tvcast-netwd: reboots the box when the wifi has died but Linux hasn't.
+#
+# With the internal Bluetooth on and photos uploading, the box lost the wifi
+# while the system kept running: the hardware watchdog only catches a frozen
+# kernel, so it never fired and the box stayed unreachable. This runs every
+# 30 s (tvcast-netwd.timer) and reboots after FAILS checks in a row fail.
+#
+# "Network OK" means, for the wifi interface (IFACE, default wlan0):
+#   - in AP mode ("Tele"): the interface is in AP mode and has an IPv4;
+#   - joined to a wifi: it has an IPv4 and the default gateway answers a ping.
+#
+# Limits so it can't make things worse:
+#   - does nothing during the first MIN_UPTIME seconds after boot;
+#   - at most MAX_REBOOTS reboots in a row without the network coming back
+#     (the count lives on disk and resets once the network is OK again);
+#   - TVCAST_NETWD_DISABLE=1 in /etc/tvcast.env turns it off.
+# Log: journalctl -u tvcast-netwd
+set -u
+IFACE=${IFACE:-wlan0}
+FAILS=${FAILS:-4}             # 4 x 30 s = 2 min without network
+MIN_UPTIME=${MIN_UPTIME:-300} # the home wifi / "Tele" may take a while at boot
+MAX_REBOOTS=${MAX_REBOOTS:-2}
+RUN=${RUN:-/run/tvcast-netwd}         # cleared at every boot
+STATE=${STATE:-/var/lib/tvcast-netwd} # survives reboots
+UPTIME_FILE=${UPTIME_FILE:-/proc/uptime}
+say() { echo "tvcast-netwd: $*"; }
+
+[ "${TVCAST_NETWD_DISABLE:-0}" = 1 ] && exit 0
+up=$(cut -d. -f1 "$UPTIME_FILE")
+[ "$up" -ge "$MIN_UPTIME" ] || exit 0
+mkdir -p "$RUN" "$STATE"
+
+num() { v=$(cat "$1" 2>/dev/null || echo 0); case "$v" in ''|*[!0-9]*) echo 0 ;; *) echo "$v" ;; esac; }
+
+network_ok() {
+	ip -4 -o addr show dev "$IFACE" 2>/dev/null | grep -q ' inet ' || return 1
+	if iw dev "$IFACE" info 2>/dev/null | grep -q 'type AP'; then
+		return 0
+	fi
+	gw=$(ip -4 route show default dev "$IFACE" 2>/dev/null | awk '{print $3; exit}')
+	[ -n "$gw" ] || return 1
+	ping -c 1 -W 3 "$gw" >/dev/null 2>&1
+}
+
+if network_ok; then
+	[ "$(num "$RUN/fails")" -gt 0 ] && say "network back"
+	echo 0 >"$RUN/fails"
+	echo 0 >"$STATE/reboots"
+	exit 0
+fi
+
+fails=$(( $(num "$RUN/fails") + 1 ))
+echo "$fails" >"$RUN/fails"
+say "no network on $IFACE ($fails/$FAILS)"
+[ "$fails" -ge "$FAILS" ] || exit 0
+
+reboots=$(num "$STATE/reboots")
+if [ "$reboots" -ge "$MAX_REBOOTS" ]; then
+	# Already rebooted MAX_REBOOTS times without it coming back: rebooting
+	# again won't help (no antenna, router off...). Stay up for SSH/keyboard.
+	[ "$fails" -eq "$FAILS" ] && say "still no network after $reboots reboots: not rebooting again"
+	exit 0
+fi
+echo $((reboots + 1)) >"$STATE/reboots"
+say "rebooting (reboot $((reboots + 1)) of at most $MAX_REBOOTS)"
+journalctl --sync 2>/dev/null
+systemctl reboot

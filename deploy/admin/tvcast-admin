@@ -40,8 +40,23 @@ pair_remote() {
 		[ -n "$addr" ] && break
 	done
 	[ -n "$addr" ] || { echo "remote not found"; exit 1; }
-	bluetoothctl pair "$addr" && bluetoothctl trust "$addr" || { echo "pairing failed"; exit 1; }
-	echo "paired; tvcast-remote connects by itself in a few seconds"
+	# Pairing needs an agent in the same bluetoothctl session: a separate
+	# `bluetoothctl pair` fails with "Authentication Failed (0x05)".
+	{
+		echo "agent NoInputNoOutput"
+		echo "default-agent"
+		echo "pair $addr"
+		sleep 15
+		echo "trust $addr"
+		sleep 2
+		echo "quit"
+	} | bluetoothctl
+	if bluetoothctl info "$addr" | grep -q 'Paired: yes'; then
+		echo "paired; tvcast-remote connects by itself in a few seconds"
+	else
+		echo "pairing failed"
+		exit 1
+	fi
 }
 
 case "${1:-}" in

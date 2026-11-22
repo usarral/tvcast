@@ -220,6 +220,34 @@ Tested on a desktop Linux (BlueZ 5.x, CSR USB adapter `0a12:0001`) with
   settings (`btc_*`) in the wifi nvram, comparing with the Android backup.
   Plan B stays a €5 USB adapter.
 
+## Deploying on the box (November 2026)
+
+- **Pairing needs the agent in the same bluetoothctl session.** A separate
+  `bluetoothctl pair` fails with `Authentication Failed (0x05)`; `agent
+  NoInputNoOutput`, `default-agent`, `pair`, `trust` in one session works.
+  The admin panel's "pair remote" does exactly that and checks `Paired: yes`.
+- **A USB adapter must go on the xHCI port** (the blue one). On the OTG port
+  (dwc2) the CSR adapter shows up but BLE scanning fails. tvcast-remote works
+  with that adapter and with the internal chip.
+- **hci0 sometimes doesn't come up** (`Failed to set baudrate`, `-110`).
+  Reloading the modules fixes it: `modprobe -r hci_uart btbcm && modprobe
+  hci_uart`.
+- **Internal Bluetooth plus photo uploads takes the network down** while the
+  system stays alive (3-4 times). The hardware watchdog doesn't help: the
+  kernel isn't frozen, only the wifi is dead. Hence `tvcast-netwd`, a timer
+  every 30 s that reboots after 4 failed checks (gateway ping, or an AP
+  interface when the box runs its own "Tele" wifi), at most twice in a row
+  and never in the first 5 minutes of uptime, so a dead router can't cause a
+  reboot loop.
+- **The guard did its job**: after two unclean boots in a row it turned
+  Bluetooth off and blocked it with rfkill. The box now runs without the
+  remote.
+- **The diagnosis is still open**: the wifi antenna is a provisional wire
+  (-69 dBm, 25-45 % loss and drops even without Bluetooth). Wifi and
+  Bluetooth share the BCM4334's 2.4 GHz radio, so a weak link makes any
+  coexistence problem worse. Repeat the test with the antenna soldered (and
+  uploads rate-limited with `tc`) before buying an adapter.
+
 ## Admin panel (November 2026)
 
 - Loose shortcuts and SSH commands became one hidden panel on the TV:

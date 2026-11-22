@@ -1,0 +1,9 @@
+# One check of tvcast-netwd (see the script). Started by tvcast-netwd.timer.
+[Unit]
+Description=tvcast - reboot if the wifi died
+After=network.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=-/etc/tvcast.env
+ExecStart=/usr/local/sbin/tvcast-netwd
