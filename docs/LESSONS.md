@@ -56,6 +56,35 @@ Notas de lo que funcionó y lo que no en el hardware real, para no repetirlo.
   hace `chvt 2`. Lo de U-Boot (primeros segundos) no se puede tapar sin
   recompilarlo.
 
+## Mando oficial (en curso)
+
+- **No es infrarrojo.** La placa tiene receptor IR (`gpio_ir_recv`, rc0,
+  `/dev/lirc0`) con la tabla vacía; con todos los protocolos activados y
+  `ir-keytable -t` no llega nada al pulsar el mando.
+- **Es Bluetooth LE**: se anuncia siempre como `Sunday` (en la caja de cartón:
+  "advertising always on", LED UUID 0xFED0). No hace falta combinación para
+  emparejar: `bluetoothctl pair/trust/connect <MAC>` con el mando cerca.
+- No es un HID estándar (no tiene el servicio 0x1812), así que Linux no crea
+  ningún `/dev/input`. Del backup de Android (app `Sunrise.apk`, paquete
+  `love.sunday.sunrise.remotecontrol`, decompilada con jadx) salen los UUID:
+  botones en el servicio propio `0xFF00`, característica `0x2a4d` (1 byte, o
+  informe de 8 bytes con la tecla en el byte 2); voz en
+  `f000b000-0451-4000-b000-000000000000` (`b001` inicio/fin, `b002` audio);
+  LED en `0xFED0` (`fed1` color, `fed2` periodo, `fed3` efecto); batería
+  `0x180F`. Nombres aceptados por la app: `Sunday` y `4MOD 45 BLE`.
+- Mantener Mic enciende la luz del mando, igual que con Android.
+- Para leer el backup sin tocarlo: la tabla GPT dice dónde está cada
+  partición; se recortan `vendor`/`system` de `gunzip -c` y se leen con
+  `debugfs` (e2fsprogs) en el Mac, sin montar.
+- **Cuidado: la caja se colgó entera dos veces con el Bluetooth del chip
+  interno (BCM4334, wifi y Bluetooth en el mismo chip) activo**: una copiando
+  192 MB por wifi y otra con el mando conectado. El journal se cortaba de
+  golpe. Por eso `bluetooth.service` queda desactivado al arrancar,
+  `journald` sincroniza cada 2 s y `kernel.panic=10` reinicia si el kernel
+  falla. En un tercer intento conectado 2,5 min no se colgó, pero tampoco
+  llegó ninguna notificación de botones: falta mirarlo con `btmon`. Si el
+  chip interno no es fiable, plan B: adaptador Bluetooth USB.
+
 ## Sobre "nadie lo ha hecho"
 
 No he encontrado documentación previa de reutilizar la Sunday Box con
