@@ -47,6 +47,9 @@ type mpvResp struct {
 	EntryID   int64           `json:"playlist_entry_id"`
 }
 
+// mpvSocketWait es lo máximo que se espera a que mpv cree su socket IPC.
+const mpvSocketWait = 30 * time.Second
+
 func (m *MPV) Start(stop <-chan struct{}) {
 	m.pending = map[int]chan mpvResp{}
 	m.entries = map[int64]string{}
@@ -66,6 +69,7 @@ func (m *MPV) Start(stop <-chan struct{}) {
 
 func (m *MPV) runOnce(stop <-chan struct{}) error {
 	var cmd *exec.Cmd
+	var exited chan struct{} // se cierra cuando el proceso mpv termina
 	if m.Bin != "" {
 		os.Remove(m.Socket)
 		args := append([]string{
@@ -79,23 +83,46 @@ func (m *MPV) runOnce(stop <-chan struct{}) error {
 		if err := cmd.Start(); err != nil {
 			return fmt.Errorf("no se pudo lanzar mpv: %w", err)
 		}
-		go func() { <-stop; cmd.Process.Kill() }()
+		exited = make(chan struct{})
+		go func() { cmd.Wait(); close(exited) }()
+		go func() {
+			select {
+			case <-stop:
+				cmd.Process.Kill()
+			case <-exited:
+			}
+		}()
 	}
 
+	// En frío (arranque de la caja, CPU al 100 %) mpv tarda más de 5 s en
+	// abrir DRM y crear el socket. Si lo matábamos a los 5 s, la tele
+	// enseñaba la consola unos segundos en cada arranque. Ahora se espera
+	// mientras mpv siga vivo, con un tope generoso.
 	var conn net.Conn
 	var err error
-	for i := 0; i < 50; i++ {
+	deadline := time.Now().Add(mpvSocketWait)
+	for {
 		if conn, err = net.Dial("unix", m.Socket); err == nil {
 			break
+		}
+		if time.Now().After(deadline) {
+			break
+		}
+		if exited != nil {
+			select {
+			case <-exited:
+				return fmt.Errorf("mpv terminó antes de abrir el socket IPC: %w", err)
+			default:
+			}
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
 	if err != nil {
 		if cmd != nil {
 			cmd.Process.Kill()
-			cmd.Wait()
+			<-exited
 		}
-		return fmt.Errorf("sin socket IPC: %w", err)
+		return fmt.Errorf("sin socket IPC tras %s: %w", mpvSocketWait, err)
 	}
 	m.mu.Lock()
 	m.conn = conn
@@ -117,7 +144,7 @@ func (m *MPV) runOnce(stop <-chan struct{}) error {
 	m.mu.Unlock()
 	if cmd != nil {
 		cmd.Process.Kill()
-		cmd.Wait()
+		<-exited
 	}
 	return errors.New("mpv se cerró; reiniciando")
 }
